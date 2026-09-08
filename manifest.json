@@ -1,0 +1,17 @@
+{
+  "name": "AI Meme Generator - Offline PWA",
+  "short_name": "MemeGen AI",
+  "description": "Buildless, offline-first AI Meme Generator with canvas editing, smart auto-templates, and local gallery.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%236366f1'><rect width='512' height='512' rx='100' fill='%230f172a'/><path d='M120 180 h272 v200 h-272 z' fill='%231e293b' stroke='%236366f1' stroke-width='16'/><circle cx='200' cy='240' r='25' fill='%23fbbf24'/><circle cx='312' cy='240' r='25' fill='%23fbbf24'/><path d='M180 320 Q256 380 332 320' fill='none' stroke='%23ef4444' stroke-width='20' stroke-linecap='round'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
