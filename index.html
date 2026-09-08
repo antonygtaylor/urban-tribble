@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#005ea5">
+  <meta name="description" content="UK Tax Document Management Progressive Web App for scanning, parsing, and tracking Payslips, P60, P45, and P11D documents offline.">
+  <title>UK Tax Document Manager</title>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Header / Navigation Bar -->
+  <header class="app-header">
+    <div class="header-content">
+      <div class="brand">
+        <svg class="crown-icon" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+          <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/>
+        </svg>
+        <h1>UK Tax Doc Manager</h1>
+      </div>
+      <div id="offlineBadge" class="offline-badge hidden">Offline Mode</div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-tabs">
+    <button class="nav-tab active" data-tab="scanTab">
+      <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
+      </svg>
+      <span>Scan / Add</span>
+    </button>
+    <button class="nav-tab" data-tab="historyTab">
+      <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6a7 7 0 1 1 7 7 6.97 6.97 0 0 1-5-2.14l-1.42 1.42A8.95 8.95 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8z"/>
+      </svg>
+      <span>Records</span>
+    </button>
+    <button class="nav-tab" data-tab="analyticsTab">
+      <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+      </svg>
+      <span>Analytics</span>
+    </button>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="app-main">
+    <!-- TAB 1: SCAN & ADD DOCUMENT -->
+    <section id="scanTab" class="tab-content active">
+      <div class="card scan-card">
+        <h2>Capture or Upload Tax Document</h2>
+        <p class="subtitle">Supports UK Payslips, P60, P45, and P11D documents</p>
+
+        <div class="upload-options">
+          <label for="cameraInput" class="btn btn-primary btn-block">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/>
+            </svg>
+            Take Photo with Camera
+          </label>
+          <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden-input">
+
+          <label for="fileInput" class="btn btn-secondary btn-block">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+            </svg>
+            Upload Image File
+          </label>
+          <input type="file" id="fileInput" accept="image/*" class="hidden-input">
+
+          <button id="btnManualAdd" class="btn btn-outline btn-block">
+            + Manual Entry (Without OCR)
+          </button>
+        </div>
+
+        <!-- OCR Processing Status Banner -->
+        <div id="ocrStatus" class="ocr-status hidden">
+          <div class="spinner"></div>
+          <div class="status-info">
+            <span id="ocrStatusText" class="status-text">Scanning document...</span>
+            <div class="progress-bar-bg">
+              <div id="ocrProgressBar" class="progress-bar-fill"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Image Preview Container -->
+        <div id="imagePreviewContainer" class="image-preview-container hidden">
+          <h3>Document Preview</h3>
+          <img id="imagePreview" src="" alt="Selected Tax Document Preview">
+        </div>
+      </div>
+
+      <!-- EDITABLE REVIEW FORM CARD -->
+      <div id="reviewCard" class="card review-card hidden">
+        <div class="card-header-row">
+          <h2>Review & Confirm Extracted Figures</h2>
+          <span id="docTypeBadge" class="badge">Payslip</span>
+        </div>
+        <p class="subtitle">Please verify or correct parsed figures before saving to your offline database.</p>
+
+        <!-- Document Type Selector Override -->
+        <div class="form-group">
+          <label for="docTypeSelect"><strong>Document Type:</strong></label>
+          <select id="docTypeSelect" class="form-control">
+            <option value="payslip">Payslip</option>
+            <option value="p60">P60 (End of Year Certificate)</option>
+            <option value="p45">P45 (Details of Employee Leaving)</option>
+            <option value="p11d">P11D (Expenses & Benefits in Kind)</option>
+          </select>
+        </div>
+
+        <form id="reviewForm">
+          <!-- Dynamic Form Fields Container -->
+          <div id="dynamicFields" class="form-grid"></div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg">Save Document</button>
+            <button type="button" id="btnCancelReview" class="btn btn-outline">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 2: HISTORY & RECORDS LOG -->
+    <section id="historyTab" class="tab-content">
+      <div class="card">
+        <h2>Document History & Records</h2>
+        <p class="subtitle">Searchable, filterable log of all saved tax documents</p>
+
+        <!-- Search & Filter Controls -->
+        <div class="filter-bar">
+          <div class="form-group filter-item">
+            <input type="text" id="searchInput" class="form-control" placeholder="Search by employer, name, tax code...">
+          </div>
+          <div class="form-group filter-item">
+            <select id="filterTaxYear" class="form-control">
+              <option value="all">All Tax Years</option>
+            </select>
+          </div>
+          <div class="form-group filter-item">
+            <select id="filterDocType" class="form-control">
+              <option value="all">All Document Types</option>
+              <option value="payslip">Payslips</option>
+              <option value="p60">P60</option>
+              <option value="p45">P45</option>
+              <option value="p11d">P11D</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Records List Container -->
+        <div id="recordsList" class="records-list"></div>
+      </div>
+    </section>
+
+    <!-- TAB 3: ANALYTICS & FINANCIAL TRENDS -->
+    <section id="analyticsTab" class="tab-content">
+      <div class="card">
+        <div class="card-header-row">
+          <h2>Tax & Income Analytics</h2>
+          <select id="analyticsTaxYear" class="form-control inline-select">
+            <option value="all">All Tax Years</option>
+          </select>
+        </div>
+        <p class="subtitle">Financial trends, tax breakdowns, and P60 reconciliation</p>
+
+        <!-- Numerical Reconciliation Summary Card -->
+        <div id="reconciliationSummary" class="reconciliation-summary-container"></div>
+      </div>
+
+      <!-- Charts Grid -->
+      <div class="charts-grid">
+        <div class="card chart-card">
+          <h3>Income & Deductions Timeline</h3>
+          <p class="chart-desc">Gross vs. Net Pay and Total Deductions across months</p>
+          <div class="chart-wrapper">
+            <canvas id="chartTimeline"></canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <h3>Deduction Breakdown</h3>
+          <p class="chart-desc">PAYE Tax, NI, Pension, and Student Loan splits</p>
+          <div class="chart-wrapper">
+            <canvas id="chartDeductions"></canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <h3>Annual Tax Reconciliation (P60 vs Payslips)</h3>
+          <p class="chart-desc">Comparing P60 total figures with accumulated monthly payslips</p>
+          <div class="chart-wrapper">
+            <canvas id="chartP60Reconciliation"></canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <h3>P11D Benefits in Kind Impact</h3>
+          <p class="chart-desc">Visual breakdown of taxable employee benefits</p>
+          <div class="chart-wrapper">
+            <canvas id="chartBenefits"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- EDIT / VIEW DETAIL MODAL -->
+  <div id="detailModal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle">Document Details</h3>
+        <button id="btnModalClose" class="btn-icon">&times;</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+      <div class="modal-footer">
+        <button id="btnModalSave" class="btn btn-primary">Update</button>
+        <button id="btnModalDelete" class="btn btn-danger">Delete Document</button>
+        <button id="btnModalCancel" class="btn btn-outline">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Load Scripts Global Scope (No ES modules as per constraints) -->
+  <script src="vendor/chart.min.js"></script>
+  <script src="vendor/tesseract.min.js"></script>
+  <script src="db.js"></script>
+  <script src="ocr.js"></script>
+  <script src="analytics.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
