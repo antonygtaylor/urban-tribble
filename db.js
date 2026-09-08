@@ -1,5 +1,5 @@
 /**
- * db.js - IndexedDB storage and UK Tax Year utility helper functions
+ * db.js - IndexedDB storage, UK Tax Year utility & Duplicate Detection helper functions
  * UK Tax Document Management PWA
  */
 
@@ -22,7 +22,6 @@
       return getTaxYear(now);
     }
 
-    // If input is already a tax year string like "2025-2026" or "2025/26"
     if (typeof inputDate === 'string') {
       const tyMatch = inputDate.match(/^(20\d{2})[-/](20\d{2}|\d{2})$/);
       if (tyMatch) {
@@ -40,10 +39,9 @@
     }
 
     const year = date.getFullYear();
-    const month = date.getMonth() + 1; // 1-12
+    const month = date.getMonth() + 1;
     const day = date.getDate();
 
-    // Before April 6th belongs to previous tax year
     if (month < 4 || (month === 4 && day < 6)) {
       return `${year - 1}-${year}`;
     } else {
@@ -53,31 +51,25 @@
 
   /**
    * Determines the UK Tax Month (1 to 12) for a given date.
-   * Tax Month 1: 6 April - 5 May
-   * Tax Month 12: 6 March - 5 April
-   * @param {string|Date} inputDate
-   * @returns {number} 1 - 12
    */
   function getTaxMonthNum(inputDate) {
     const date = new Date(inputDate);
     if (isNaN(date.getTime())) return 1;
 
-    const month = date.getMonth() + 1; // 1-12
+    const month = date.getMonth() + 1;
     const day = date.getDate();
 
     if (month === 4) {
       return day >= 6 ? 1 : 12;
     } else if (month > 4) {
       return day >= 6 ? month - 3 : month - 4;
-    } else { // month 1..3
+    } else {
       return day >= 6 ? month + 9 : month + 8;
     }
   }
 
   /**
    * Helper to format currency in GBP (£)
-   * @param {number|string} value
-   * @returns {string}
    */
   function formatCurrency(value) {
     const num = parseFloat(value);
@@ -89,8 +81,54 @@
   }
 
   /**
+   * Computes a unique signature for a document to identify duplicate uploads.
+   * @param {Object} doc
+   * @returns {string}
+   */
+  function getDocSignature(doc) {
+    if (!doc) return '';
+    const type = (doc.docType || 'payslip').toLowerCase();
+    const emp = (doc.employerName || doc.employerDetails || '').toLowerCase().trim();
+
+    if (type === 'payslip') {
+      const payDate = doc.payDate || '';
+      const gross = Number(doc.grossPay || 0).toFixed(2);
+      return `payslip_${payDate}_${gross}_${emp}`;
+    } else if (type === 'p60') {
+      const ty = doc.taxYear || '';
+      const totalPay = Number(doc.totalPay || 0).toFixed(2);
+      return `p60_${ty}_${totalPay}_${emp}`;
+    } else if (type === 'p45') {
+      const leaveDate = doc.leavingDate || '';
+      const payToDate = Number(doc.totalPayToDate || 0).toFixed(2);
+      return `p45_${leaveDate}_${payToDate}_${emp}`;
+    } else if (type === 'p11d') {
+      const ty = doc.taxYear || '';
+      const benefits = Number(doc.totalBenefits || 0).toFixed(2);
+      return `p11d_${ty}_${benefits}_${emp}`;
+    }
+    return `doc_${type}_${emp}`;
+  }
+
+  /**
+   * Checks whether a document is a duplicate of an existing record.
+   * @param {Object} doc
+   * @param {Array} existingDocs
+   * @returns {boolean}
+   */
+  function isDuplicateRecord(doc, existingDocs) {
+    if (!doc || !Array.isArray(existingDocs)) return false;
+    const sig = getDocSignature(doc);
+
+    return existingDocs.some(existing => {
+      // Don't compare document with itself when updating
+      if (doc.id && existing.id === doc.id) return false;
+      return getDocSignature(existing) === sig;
+    });
+  }
+
+  /**
    * Opens / initializes IndexedDB
-   * @returns {Promise<IDBDatabase>}
    */
   function initDB() {
     return new Promise((resolve, reject) => {
@@ -124,8 +162,6 @@
 
   /**
    * Saves or updates a document in IndexedDB
-   * @param {Object} doc
-   * @returns {Promise<Object>} saved document
    */
   async function saveDocument(doc) {
     const db = await initDB();
@@ -142,7 +178,6 @@
       }
       record.updatedAt = new Date().toISOString();
 
-      // Ensure taxYear is present
       if (!record.taxYear) {
         record.taxYear = getTaxYear(record.payDate || record.leavingDate || record.createdAt);
       } else {
@@ -163,7 +198,6 @@
 
   /**
    * Retrieves all documents from IndexedDB
-   * @returns {Promise<Array>}
    */
   async function getAllDocuments() {
     const db = await initDB();
@@ -174,7 +208,6 @@
 
       request.onsuccess = function () {
         const docs = request.result || [];
-        // Sort descending by payDate or createdAt
         docs.sort((a, b) => {
           const dateA = new Date(a.payDate || a.leavingDate || a.createdAt);
           const dateB = new Date(b.payDate || b.leavingDate || b.createdAt);
@@ -191,8 +224,6 @@
 
   /**
    * Retrieves a document by ID
-   * @param {string} id
-   * @returns {Promise<Object|null>}
    */
   async function getDocumentById(id) {
     const db = await initDB();
@@ -213,8 +244,6 @@
 
   /**
    * Deletes a document by ID
-   * @param {string} id
-   * @returns {Promise<boolean>}
    */
   async function deleteDocument(id) {
     const db = await initDB();
@@ -234,8 +263,7 @@
   }
 
   /**
-   * Clears all documents (useful for testing or reset)
-   * @returns {Promise<boolean>}
+   * Clears all documents
    */
   async function clearAllDocuments() {
     const db = await initDB();
@@ -259,6 +287,8 @@
     getTaxYear,
     getTaxMonthNum,
     formatCurrency,
+    getDocSignature,
+    isDuplicateRecord,
     initDB,
     saveDocument,
     getAllDocuments,

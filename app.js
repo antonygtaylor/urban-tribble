@@ -10,8 +10,12 @@
   let currentScannedResult = null;
   let activeEditingDocId = null;
   let allStoredDocuments = [];
-  let recordsViewMode = 'cards'; // 'cards' or 'table'
+  let recordsViewMode = 'cards';
   let isAnalyticsTableVisible = false;
+
+  // Step-Through Recall State
+  let recallPayslipsList = [];
+  let currentRecallIndex = 0;
 
   // DOM Elements
   const navTabs = document.querySelectorAll('.nav-tab');
@@ -29,6 +33,7 @@
   const ovTotalNet = document.getElementById('ovTotalNet');
   const ovTotalTax = document.getElementById('ovTotalTax');
   const btnOverviewScan = document.getElementById('btnOverviewScan');
+  const btnOverviewRecall = document.getElementById('btnOverviewRecall');
   const overviewEmployersList = document.getElementById('overviewEmployersList');
 
   // Scan & Form
@@ -58,12 +63,22 @@
   const recordsList = document.getElementById('recordsList');
   const btnViewCards = document.getElementById('btnViewCards');
   const btnViewTable = document.getElementById('btnViewTable');
+  const btnRecordsRecall = document.getElementById('btnRecordsRecall');
 
   // Analytics
   const analyticsTaxYear = document.getElementById('analyticsTaxYear');
   const btnToggleAnalyticsTable = document.getElementById('btnToggleAnalyticsTable');
   const analyticsTableContainer = document.getElementById('analyticsTableContainer');
   const analyticsTableContent = document.getElementById('analyticsTableContent');
+
+  // Step-Through Recall Modal
+  const recallModal = document.getElementById('recallModal');
+  const recallStepIndicator = document.getElementById('recallStepIndicator');
+  const payslipSheet = document.getElementById('payslipSheet');
+  const btnPrevPayslip = document.getElementById('btnPrevPayslip');
+  const btnNextPayslip = document.getElementById('btnNextPayslip');
+  const btnRecallClose = document.getElementById('btnRecallClose');
+  const btnRecallDone = document.getElementById('btnRecallDone');
 
   // Modal & Toast
   const detailModal = document.getElementById('detailModal');
@@ -87,6 +102,7 @@
     setupImageHandlers();
     setupReviewForm();
     setupFiltersAndViewToggles();
+    setupRecallViewer();
     setupModal();
     setupMismatchBanner();
     registerServiceWorker();
@@ -117,7 +133,7 @@
     }, duration);
   }
 
-  /* Navigation Tabs */
+  /* Tab Navigation */
   function setupNavigation() {
     navTabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -150,9 +166,13 @@
   /* Overview Controls */
   function setupOverviewControls() {
     if (btnOverviewScan) {
-      btnOverviewScan.addEventListener('click', () => {
-        switchTab('scanTab');
-      });
+      btnOverviewScan.addEventListener('click', () => switchTab('scanTab'));
+    }
+    if (btnOverviewRecall) {
+      btnOverviewRecall.addEventListener('click', () => openPayslipRecallViewer());
+    }
+    if (btnRecordsRecall) {
+      btnRecordsRecall.addEventListener('click', () => openPayslipRecallViewer());
     }
   }
 
@@ -217,13 +237,11 @@
     }
 
     if (mismatchFound) {
-      // Check localStorage to show once per unique mismatch
       const shownMismatches = JSON.parse(localStorage.getItem('shown_mismatches') || '[]');
       if (!shownMismatches.includes(mismatchKey)) {
         mismatchMessage.textContent = mismatchText;
         mismatchBanner.classList.remove('hidden');
 
-        // Record signature into localStorage
         shownMismatches.push(mismatchKey);
         localStorage.setItem('shown_mismatches', JSON.stringify(shownMismatches));
       }
@@ -243,6 +261,9 @@
     const employerGroups = {};
 
     allStoredDocuments.forEach(doc => {
+      // Exclude duplicates from portfolio summary totals
+      if (doc.isDuplicate) return;
+
       const empName = doc.employerName || doc.employerDetails || 'Unknown Employer';
       employersSet.add(empName);
 
@@ -264,7 +285,6 @@
     ovTotalNet.textContent = TaxDB.formatCurrency(totalNet);
     ovTotalTax.textContent = TaxDB.formatCurrency(totalTax);
 
-    // Render Employer Group Cards
     if (Object.keys(employerGroups).length === 0) {
       overviewEmployersList.innerHTML = `
         <div class="empty-state">
@@ -281,7 +301,7 @@
         <div class="employer-card">
           <div>
             <div class="employer-name">${emp}</div>
-            <div class="employer-stats">${group.count} document(s) uploaded</div>
+            <div class="employer-stats">${group.count} record(s)</div>
           </div>
           <button class="btn btn-outline btn-sm btn-filter-employer" data-employer="${emp}">
             View Records
@@ -292,7 +312,6 @@
 
     overviewEmployersList.innerHTML = empHtml;
 
-    // Attach click listeners to filter records by employer
     overviewEmployersList.querySelectorAll('.btn-filter-employer').forEach(btn => {
       btn.addEventListener('click', e => {
         const emp = e.target.getAttribute('data-employer');
@@ -302,7 +321,7 @@
     });
   }
 
-  /* Populate Dropdowns (Tax Year & Employer) */
+  /* Populate Dropdowns */
   function populateDropdownFilters() {
     const yearsSet = new Set();
     const employersSet = new Set();
@@ -318,7 +337,6 @@
     const sortedYears = Array.from(yearsSet).sort().reverse();
     const sortedEmployers = Array.from(employersSet).sort();
 
-    // Tax Year dropdowns
     [filterTaxYear, analyticsTaxYear].forEach(select => {
       const currentVal = select.value || 'all';
       select.innerHTML = '<option value="all">All Tax Years</option>';
@@ -331,7 +349,6 @@
       select.value = currentVal;
     });
 
-    // Employer dropdown
     const currentEmpVal = filterEmployer.value || 'all';
     filterEmployer.innerHTML = '<option value="all">All Employers</option>';
     sortedEmployers.forEach(emp => {
@@ -399,7 +416,7 @@
     }
   }
 
-  /* Setup Review Form and Dynamic Field Renderer */
+  /* Setup Review Form & Duplicate Check */
   function setupReviewForm() {
     docTypeSelect.addEventListener('change', () => {
       const selectedType = docTypeSelect.value;
@@ -443,9 +460,16 @@
       const targetDate = record.payDate || record.leavingDate || new Date();
       record.taxYear = record.taxYear || TaxDB.getTaxYear(targetDate);
 
+      // Duplicate Detection Check
+      const isDup = TaxDB.isDuplicateRecord(record, allStoredDocuments);
+      if (isDup) {
+        record.isDuplicate = true;
+        showToast('Duplicate record detected - marked and excluded from sums.');
+      }
+
       try {
         await TaxDB.saveDocument(record);
-        showToast('Document saved successfully!');
+        if (!isDup) showToast('Document saved successfully!');
         reviewCard.classList.add('hidden');
         imagePreviewContainer.classList.add('hidden');
         cameraInput.value = '';
@@ -740,11 +764,14 @@
           amountText = `Benefits: ${TaxDB.formatCurrency(doc.totalBenefits)}`;
         }
 
+        const dupBadge = doc.isDuplicate ? '<span class="badge badge-duplicate">DUPLICATE</span>' : '';
+
         html += `
           <div class="record-item" data-id="${doc.id}">
             <div class="record-main">
               <div class="record-title">
                 <span class="badge badge-${doc.docType}">${doc.docType.toUpperCase()}</span>
+                ${dupBadge}
                 <span>${title}</span>
               </div>
               <div class="record-meta">
@@ -788,9 +815,11 @@
       else if (doc.docType === 'p45') mainAmount = `Pay to Date: ${TaxDB.formatCurrency(doc.totalPayToDate)}`;
       else if (doc.docType === 'p11d') mainAmount = `Benefits: ${TaxDB.formatCurrency(doc.totalBenefits)}`;
 
+      const dupBadge = doc.isDuplicate ? '<span class="badge badge-duplicate">DUP</span> ' : '';
+
       html += `
         <tr>
-          <td><span class="badge badge-${doc.docType}">${doc.docType.toUpperCase()}</span></td>
+          <td>${dupBadge}<span class="badge badge-${doc.docType}">${doc.docType.toUpperCase()}</span></td>
           <td>${doc.payDate || doc.leavingDate || doc.taxYear}</td>
           <td>${doc.employerName || doc.employerDetails || '-'}</td>
           <td>${doc.employeeName || '-'} <br><small style="color:var(--text-muted)">${doc.nino || ''}</small></td>
@@ -822,7 +851,7 @@
   /* Render Analytics Data Table */
   function renderAnalyticsTable() {
     const year = analyticsTaxYear.value;
-    const filteredDocs = TaxAnalytics.filterDocsByTaxYear(allStoredDocuments, year);
+    const filteredDocs = TaxAnalytics.filterDocsByTaxYear(allStoredDocuments, year, true);
 
     if (filteredDocs.length === 0) {
       analyticsTableContent.innerHTML = '<p class="subtitle">No records available for this tax year.</p>';
@@ -870,6 +899,154 @@
     `;
 
     analyticsTableContent.innerHTML = html;
+  }
+
+  /* STEP-THROUGH DIGITAL PAYSLIP RECALL VIEWER CONTROLLER */
+  function setupRecallViewer() {
+    btnRecallClose.addEventListener('click', closeRecallViewer);
+    btnRecallDone.addEventListener('click', closeRecallViewer);
+    recallModal.querySelector('.modal-overlay').addEventListener('click', closeRecallViewer);
+
+    btnPrevPayslip.addEventListener('click', () => {
+      if (currentRecallIndex > 0) {
+        currentRecallIndex--;
+        renderCurrentPayslipSheet();
+      }
+    });
+
+    btnNextPayslip.addEventListener('click', () => {
+      if (currentRecallIndex < recallPayslipsList.length - 1) {
+        currentRecallIndex++;
+        renderCurrentPayslipSheet();
+      }
+    });
+
+    // Keyboard Arrow navigation
+    window.addEventListener('keydown', e => {
+      if (recallModal.classList.contains('hidden')) return;
+      if (e.key === 'ArrowLeft') {
+        if (currentRecallIndex > 0) {
+          currentRecallIndex--;
+          renderCurrentPayslipSheet();
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (currentRecallIndex < recallPayslipsList.length - 1) {
+          currentRecallIndex++;
+          renderCurrentPayslipSheet();
+        }
+      } else if (e.key === 'Escape') {
+        closeRecallViewer();
+      }
+    });
+  }
+
+  function openPayslipRecallViewer(startIndex = 0) {
+    recallPayslipsList = allStoredDocuments
+      .filter(d => d.docType === 'payslip')
+      .sort((a, b) => new Date(a.payDate || a.createdAt) - new Date(b.payDate || b.createdAt));
+
+    if (recallPayslipsList.length === 0) {
+      showToast('No payslips available to recall. Please scan or add a payslip first.');
+      return;
+    }
+
+    currentRecallIndex = Math.max(0, Math.min(startIndex, recallPayslipsList.length - 1));
+    renderCurrentPayslipSheet();
+    recallModal.classList.remove('hidden');
+  }
+
+  function renderCurrentPayslipSheet() {
+    const ps = recallPayslipsList[currentRecallIndex];
+    if (!ps) return;
+
+    recallStepIndicator.textContent = `Payslip ${currentRecallIndex + 1} of ${recallPayslipsList.length}`;
+
+    // Enable/disable navigation buttons
+    btnPrevPayslip.disabled = currentRecallIndex === 0;
+    btnNextPayslip.disabled = currentRecallIndex === recallPayslipsList.length - 1;
+
+    const gross = Number(ps.grossPay || 0);
+    const tax = Number(ps.taxPaid || 0);
+    const ni = Number(ps.nationalInsurance || 0);
+    const pension = Number(ps.pension || 0);
+    const studentLoan = Number(ps.studentLoan || 0);
+    const other = Number(ps.otherDeductions || 0);
+    const totalDeductions = tax + ni + pension + studentLoan + other;
+    const net = Number(ps.netPay || (gross - totalDeductions));
+
+    payslipSheet.innerHTML = `
+      <div class="ps-header">
+        <div>
+          <div class="ps-employer-title">${ps.employerName || 'EMPLOYER PAY ADVICE'}</div>
+          <div style="font-size:0.85rem; color:var(--text-muted);">Employee: ${ps.employeeName || 'Standard Employee'}</div>
+        </div>
+        <div style="text-align:right;">
+          <span class="ps-title-badge">OFFICIAL PAYSLIP</span>
+          <div style="font-size:0.85rem; font-weight:700; color:var(--gov-blue-dark); margin-top:0.2rem;">${ps.payDate || 'Date N/A'}</div>
+        </div>
+      </div>
+
+      <div class="ps-meta-grid">
+        <div class="ps-meta-item">
+          <label>Tax Year</label>
+          <span>${ps.taxYear || '2025-2026'}</span>
+        </div>
+        <div class="ps-meta-item">
+          <label>Tax Code</label>
+          <span>${ps.taxCode || '1257L'}</span>
+        </div>
+        <div class="ps-meta-item">
+          <label>NI Number</label>
+          <span>${ps.nino || 'N/A'}</span>
+        </div>
+        <div class="ps-meta-item">
+          <label>Tax Period</label>
+          <span>${ps.taxWeekMonth || 'Month'}</span>
+        </div>
+      </div>
+
+      <div class="ps-tables-grid">
+        <div class="ps-table-col">
+          <h4>EARNINGS</h4>
+          <div class="ps-row">
+            <span>Basic / Gross Pay</span>
+            <span>${TaxDB.formatCurrency(gross)}</span>
+          </div>
+          <div class="ps-row" style="border-top: 1px dashed var(--border-color); font-weight:700; margin-top:0.5rem; padding-top:0.5rem;">
+            <span>Total Gross</span>
+            <span>${TaxDB.formatCurrency(gross)}</span>
+          </div>
+        </div>
+
+        <div class="ps-table-col">
+          <h4>DEDUCTIONS</h4>
+          <div class="ps-row">
+            <span>PAYE Income Tax</span>
+            <span>${TaxDB.formatCurrency(tax)}</span>
+          </div>
+          <div class="ps-row">
+            <span>National Insurance</span>
+            <span>${TaxDB.formatCurrency(ni)}</span>
+          </div>
+          ${pension > 0 ? `<div class="ps-row"><span>Pension</span><span>${TaxDB.formatCurrency(pension)}</span></div>` : ''}
+          ${studentLoan > 0 ? `<div class="ps-row"><span>Student Loan</span><span>${TaxDB.formatCurrency(studentLoan)}</span></div>` : ''}
+          ${other > 0 ? `<div class="ps-row"><span>Other Ded.</span><span>${TaxDB.formatCurrency(other)}</span></div>` : ''}
+          <div class="ps-row" style="border-top: 1px dashed var(--border-color); font-weight:700; margin-top:0.5rem; padding-top:0.5rem;">
+            <span>Total Deductions</span>
+            <span>${TaxDB.formatCurrency(totalDeductions)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ps-net-box">
+        <span class="ps-net-label">NET PAY (TAKE HOME)</span>
+        <span class="ps-net-amount">${TaxDB.formatCurrency(net)}</span>
+      </div>
+    `;
+  }
+
+  function closeRecallViewer() {
+    recallModal.classList.add('hidden');
   }
 
   /* Detail / Edit Modal */

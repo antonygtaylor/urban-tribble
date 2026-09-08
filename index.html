@@ -102,11 +102,18 @@
         </div>
       </div>
 
-      <!-- Quick Action Card -->
+      <!-- Quick Actions Card -->
       <div class="card">
         <div class="card-header-row">
-          <h3>Quick Scan or Upload</h3>
-          <button id="btnOverviewScan" class="btn btn-primary btn-sm">+ Add New Document</button>
+          <h3>Quick Actions</h3>
+          <div class="header-controls-row">
+            <button id="btnOverviewRecall" class="btn btn-secondary btn-sm">
+              🔍 Step-Through Payslips
+            </button>
+            <button id="btnOverviewScan" class="btn btn-primary btn-sm">
+              + Add New Document
+            </button>
+          </div>
         </div>
       </div>
 
@@ -199,20 +206,24 @@
       <div class="card">
         <div class="card-header-row">
           <h2>Document History & Records</h2>
-          <!-- View Mode Toggle (Card vs Table) -->
-          <div class="view-toggle-group">
-            <button id="btnViewCards" class="btn-toggle active" title="Card View">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>
-              </svg>
-              Cards
+          <div class="header-controls-row">
+            <button id="btnRecordsRecall" class="btn btn-secondary btn-sm">
+              🔍 Recall Payslips
             </button>
-            <button id="btnViewTable" class="btn-toggle" title="Table View">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M4 15h16v-2H4v2zm0 4h16v-2H4v2zm0-8h16V9H4v2zm0-6v2h16V5H4z"/>
-              </svg>
-              Table
-            </button>
+            <div class="view-toggle-group">
+              <button id="btnViewCards" class="btn-toggle active" title="Card View">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>
+                </svg>
+                Cards
+              </button>
+              <button id="btnViewTable" class="btn-toggle" title="Table View">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M4 15h16v-2H4v2zm0 4h16v-2H4v2zm0-8h16V9H4v2zm0-6v2h16V5H4z"/>
+                </svg>
+                Table
+              </button>
+            </div>
           </div>
         </div>
         <p class="subtitle">Searchable, filterable log of all saved tax documents</p>
@@ -268,7 +279,7 @@
         <div id="reconciliationSummary" class="reconciliation-summary-container"></div>
       </div>
 
-      <!-- Optional Analytics Structured Table View Container -->
+      <!-- Analytics Structured Table View Container -->
       <div id="analyticsTableContainer" class="card hidden">
         <h3>Analytics Summary Table</h3>
         <div id="analyticsTableContent" class="table-responsive"></div>
@@ -310,6 +321,31 @@
       </div>
     </section>
   </main>
+
+  <!-- STEP-THROUGH DIGITAL PAYSLIP RECALL MODAL -->
+  <div id="recallModal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-card payslip-recall-card">
+      <div class="modal-header">
+        <div>
+          <h3>Digital Payslip Recall Viewer</h3>
+          <span id="recallStepIndicator" class="recall-counter">Payslip 1 of 1</span>
+        </div>
+        <button id="btnRecallClose" class="btn-icon">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Rendered Digital UK Payslip -->
+        <div id="payslipSheet" class="payslip-sheet"></div>
+      </div>
+
+      <div class="modal-footer recall-footer">
+        <button id="btnPrevPayslip" class="btn btn-outline">&larr; Previous</button>
+        <button id="btnNextPayslip" class="btn btn-outline">Next &rarr;</button>
+        <button id="btnRecallDone" class="btn btn-primary">Close Viewer</button>
+      </div>
+    </div>
+  </div>
 
   <!-- EDIT / VIEW DETAIL MODAL -->
   <div id="detailModal" class="modal hidden">

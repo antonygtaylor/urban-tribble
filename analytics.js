@@ -25,16 +25,21 @@
   }
 
   /**
-   * Filter documents by tax year
+   * Filter documents by tax year and exclude duplicate records from calculations
    * @param {Array} documents
    * @param {string} selectedTaxYear e.g., 'all' or '2025-2026'
+   * @param {boolean} excludeDuplicates Default true
    * @returns {Array}
    */
-  function filterDocsByTaxYear(documents, selectedTaxYear) {
-    if (!selectedTaxYear || selectedTaxYear === 'all') {
-      return documents || [];
+  function filterDocsByTaxYear(documents, selectedTaxYear, excludeDuplicates = true) {
+    let docs = documents || [];
+    if (excludeDuplicates) {
+      docs = docs.filter(d => !d.isDuplicate);
     }
-    return (documents || []).filter(doc => doc.taxYear === selectedTaxYear);
+    if (!selectedTaxYear || selectedTaxYear === 'all') {
+      return docs;
+    }
+    return docs.filter(doc => doc.taxYear === selectedTaxYear);
   }
 
   /**
@@ -48,7 +53,7 @@
       return;
     }
 
-    const docs = filterDocsByTaxYear(documents, selectedTaxYear);
+    const docs = filterDocsByTaxYear(documents, selectedTaxYear, true);
 
     renderTimelineChart(docs);
     renderDeductionBreakdownChart(docs);
@@ -65,7 +70,6 @@
     const canvas = document.getElementById('chartTimeline');
     if (!canvas) return;
 
-    // Filter payslips and sort by payDate ascending
     const payslips = docs
       .filter(d => d.docType === 'payslip')
       .sort((a, b) => new Date(a.payDate || a.createdAt) - new Date(b.payDate || b.createdAt));
@@ -232,12 +236,10 @@
     const canvas = document.getElementById('chartP60Reconciliation');
     if (!canvas) return;
 
-    // Calculate sum from payslips
     const payslips = docs.filter(d => d.docType === 'payslip');
     const accumulatedGross = payslips.reduce((sum, d) => sum + Number(d.grossPay || 0), 0);
     const accumulatedTax = payslips.reduce((sum, d) => sum + Number(d.taxPaid || 0), 0);
 
-    // Get P60 figures (if present)
     const p60Docs = docs.filter(d => d.docType === 'p60');
     const p60TotalPay = p60Docs.reduce((sum, d) => sum + Number(d.totalPay || 0), 0);
     const p60TotalTax = p60Docs.reduce((sum, d) => sum + Number(d.totalTax || 0), 0);
@@ -365,14 +367,13 @@
     const totalP11DBenefits = p11dDocs.reduce((s, d) => s + Number(d.totalBenefits || 0), 0);
 
     const payDiff = totalP60Pay > 0 ? (totalP60Pay - totalPayslipGross) : 0;
-    const taxDiff = totalP60Tax > 0 ? (totalP60Tax - totalPayslipTax) : 0;
 
     summaryElem.innerHTML = `
       <div class="summary-cards-grid">
         <div class="summary-card">
           <span class="card-label">Total Gross (Payslips)</span>
           <span class="card-value">${TaxDB.formatCurrency(totalPayslipGross)}</span>
-          <span class="card-subtext">${payslips.length} payslip(s) scanned</span>
+          <span class="card-subtext">${payslips.length} payslip(s) (duplicates excluded)</span>
         </div>
         <div class="summary-card">
           <span class="card-label">Total PAYE Tax Paid</span>

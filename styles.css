@@ -432,6 +432,7 @@ body {
 .badge-p60 { background-color: var(--gov-green); }
 .badge-p45 { background-color: var(--gov-orange); }
 .badge-p11d { background-color: var(--gov-purple); }
+.badge-duplicate { background-color: var(--gov-grey-dark); }
 
 .card-header-row {
   display: flex;
@@ -578,6 +579,126 @@ body {
   margin: 0.5rem 0;
 }
 
+/* Step-Through Digital Payslip Recall Sheet */
+.payslip-recall-card {
+  max-width: 650px;
+}
+
+.recall-counter {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.payslip-sheet {
+  background: #ffffff;
+  border: 2px solid var(--gov-blue);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.02);
+  font-family: inherit;
+}
+
+.ps-header {
+  border-bottom: 2px solid var(--gov-blue);
+  padding-bottom: 0.85rem;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ps-employer-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--gov-blue-dark);
+}
+
+.ps-title-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--gov-grey-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ps-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+  background-color: var(--gov-grey-light);
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.ps-meta-item label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.ps-meta-item span {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.ps-tables-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.ps-table-col h4 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--gov-blue-dark);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.ps-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+}
+
+.ps-net-box {
+  background-color: #e6f4ea;
+  border: 2px solid var(--gov-green);
+  border-radius: var(--radius);
+  padding: 0.85rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ps-net-label {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--gov-green-dark);
+}
+
+.ps-net-amount {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--gov-green-dark);
+}
+
+.recall-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 /* Summary Cards Grid */
 .summary-cards-grid {
   display: grid;
@@ -721,6 +842,9 @@ body {
 
 @media (max-width: 600px) {
   .charts-grid {
+    grid-template-columns: 1fr;
+  }
+  .ps-tables-grid {
     grid-template-columns: 1fr;
   }
   .record-item {
