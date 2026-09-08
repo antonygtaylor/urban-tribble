@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MemeGen AI - Offline Meme Generator PWA</title>
+  <meta name="description" content="AI-Powered Offline-First Meme Generator PWA with Canvas editing, smart template auto-analysis, and local gallery.">
+  <meta name="theme-color" content="#6366f1">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='%236366f1'><rect width='512' height='512' rx='100' fill='%230f172a'/><path d='M120 180 h272 v200 h-272 z' fill='%231e293b' stroke='%236366f1' stroke-width='16'/><circle cx='200' cy='240' r='25' fill='%23fbbf24'/><circle cx='312' cy='240' r='25' fill='%23fbbf24'/><path d='M180 320 Q256 380 332 320' fill='none' stroke='%23ef4444' stroke-width='20' stroke-linecap='round'/></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="app-container">
+    <!-- Header Navigation -->
+    <header class="app-header">
+      <div class="header-brand">
+        <span class="logo-icon">🎭</span>
+        <h1>MemeGen <span class="badge">AI & Offline</span></h1>
+      </div>
+      <div class="header-actions">
+        <div id="offline-badge" class="status-badge online" title="Status">
+          <span class="status-dot"></span> <span id="status-text">Online</span>
+        </div>
+        <button id="btn-api-settings" class="btn btn-secondary btn-icon" title="API Settings">
+          ⚙️ <span class="btn-text">AI Settings</span>
+        </button>
+        <button id="btn-theme-toggle" class="btn btn-secondary btn-icon" title="Toggle Theme">
+          🌙
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="main-content">
+      <!-- Left / Top: Interactive Canvas Area -->
+      <section class="canvas-section">
+        <div class="canvas-wrapper" id="canvas-wrapper">
+          <canvas id="meme-canvas" width="600" height="600"></canvas>
+          <div id="canvas-overlay-hint" class="canvas-hint hidden">
+            <span>Click & Drag text or overlays to reposition</span>
+          </div>
+        </div>
+
+        <!-- Quick Canvas Action Bar -->
+        <div class="canvas-actions">
+          <button id="btn-add-text" class="btn btn-primary">
+            ➕ Add Text
+          </button>
+          <button id="btn-add-sticker" class="btn btn-secondary">
+            😀 Add Sticker
+          </button>
+          <button id="btn-analyze-image" class="btn btn-accent" title="Analyze colors & aspect ratio for optimal placement">
+            🔍 Auto-Analyze
+          </button>
+          <button id="btn-save-meme" class="btn btn-success">
+            💾 Save to Gallery
+          </button>
+          <button id="btn-download-meme" class="btn btn-primary">
+            ⬇️ Download
+          </button>
+          <button id="btn-share-meme" class="btn btn-secondary" title="Share Meme">
+            🔗 Share
+          </button>
+        </div>
+
+        <!-- Smart Image Auto-Analysis Results Panel -->
+        <div id="analysis-panel" class="analysis-card hidden">
+          <div class="card-header">
+            <h3>🎨 Smart Image Analysis</h3>
+            <button class="btn-close" id="btn-close-analysis">×</button>
+          </div>
+          <div class="card-body grid-2">
+            <div>
+              <p><strong>Aspect Ratio:</strong> <span id="analysis-aspect">1:1 (Square)</span></p>
+              <p><strong>Dominant Color:</strong> <span id="analysis-color-swatch" class="color-swatch"></span> <span id="analysis-color-code">#000000</span></p>
+              <p><strong>Luminance:</strong> <span id="analysis-luminance">Dark</span></p>
+            </div>
+            <div>
+              <p><strong>Recommended Text Position:</strong> <span id="analysis-placement" class="highlight-text">Top & Bottom Split</span></p>
+              <p><strong>Recommended Colors:</strong> Text <span id="rec-fill" class="swatch-inline"></span> Stroke <span id="rec-stroke" class="swatch-inline"></span></p>
+              <button id="btn-apply-analysis" class="btn btn-sm btn-accent mt-2">Apply Recommendations</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right / Bottom: Controls Sidebar -->
+      <aside class="controls-sidebar">
+        <!-- Control Tabs -->
+        <div class="tabs-nav" role="tablist">
+          <button class="tab-btn active" data-tab="tab-templates" role="tab">🖼️ Templates</button>
+          <button class="tab-btn" data-tab="tab-text" role="tab">✏️ Edit Layer</button>
+          <button class="tab-btn" data-tab="tab-ai" role="tab">🤖 AI Captions</button>
+        </div>
+
+        <div class="tab-content-container">
+          <!-- TAB 1: Templates & Custom Upload -->
+          <div id="tab-templates" class="tab-pane active">
+            <div class="section-block">
+              <h3>Upload Custom Background</h3>
+              <div class="file-upload-box">
+                <input type="file" id="file-input" accept="image/*" class="file-input">
+                <label for="file-input" class="file-label">
+                  📁 Choose File or Drag & Drop Here
+                </label>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <h3>Meme Preset Templates</h3>
+              <div class="templates-grid" id="templates-grid">
+                <!-- SVG / Base64 presets generated by app.js -->
+              </div>
+            </div>
+
+            <div class="section-block" id="custom-templates-section">
+              <h3>Saved Custom Templates</h3>
+              <div class="templates-grid" id="custom-templates-grid">
+                <p class="empty-msg">No custom templates saved yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: Text Properties & Layers -->
+          <div id="tab-text" class="tab-pane">
+            <div class="section-block">
+              <h3>Active Layer Controls</h3>
+              <div id="no-layer-selected" class="info-box">
+                Select a text layer on the canvas or click "Add Text" to start editing.
+              </div>
+
+              <div id="layer-controls" class="controls-form hidden">
+                <div class="form-group">
+                  <label for="text-content-input">Text Content</label>
+                  <textarea id="text-content-input" rows="2" class="form-control" placeholder="Enter caption..."></textarea>
+                </div>
+
+                <div class="form-row grid-2">
+                  <div class="form-group">
+                    <label for="font-family-select">Font Family</label>
+                    <select id="font-family-select" class="form-control">
+                      <option value="Impact">Impact (Classic)</option>
+                      <option value="Arial">Arial</option>
+                      <option value="'Comic Sans MS', cursive">Comic Sans</option>
+                      <option value="'Trebuchet MS', sans-serif">Trebuchet</option>
+                      <option value="'Courier New', monospace">Courier (Code)</option>
+                      <option value="Georgia, serif">Georgia</option>
+                      <option value="Verdana, sans-serif">Verdana</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="font-size-input">Size (<span id="font-size-val">40</span>px)</label>
+                    <input type="range" id="font-size-input" min="16" max="100" value="40" class="form-control-range">
+                  </div>
+                </div>
+
+                <div class="form-row grid-2">
+                  <div class="form-group">
+                    <label for="fill-color-input">Text Fill Color</label>
+                    <div class="color-picker-wrapper">
+                      <input type="color" id="fill-color-input" value="#ffffff">
+                      <span class="color-hex" id="fill-color-hex">#ffffff</span>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="stroke-color-input">Stroke Color</label>
+                    <div class="color-picker-wrapper">
+                      <input type="color" id="stroke-color-input" value="#000000">
+                      <span class="color-hex" id="stroke-color-hex">#000000</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-row grid-2">
+                  <div class="form-group">
+                    <label for="stroke-width-input">Stroke Width (<span id="stroke-width-val">4</span>px)</label>
+                    <input type="range" id="stroke-width-input" min="0" max="15" value="4" class="form-control-range">
+                  </div>
+                  <div class="form-group">
+                    <label>Text Alignment</label>
+                    <div class="btn-group">
+                      <button class="btn-toggle active" data-align="center">Center</button>
+                      <button class="btn-toggle" data-align="left">Left</button>
+                      <button class="btn-toggle" data-align="right">Right</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-row grid-2 align-center">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="all-caps-checkbox" checked>
+                    <span>ALL CAPS</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="shadow-checkbox" checked>
+                    <span>Drop Shadow</span>
+                  </label>
+                </div>
+
+                <div class="layer-actions mt-3">
+                  <button id="btn-layer-up" class="btn btn-sm btn-secondary" title="Bring Forward">⬆️ Forward</button>
+                  <button id="btn-layer-down" class="btn btn-sm btn-secondary" title="Send Backward">⬇️ Backward</button>
+                  <button id="btn-delete-layer" class="btn btn-sm btn-danger" title="Delete Layer">🗑️ Delete</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Layers Manager -->
+            <div class="section-block">
+              <h3>All Canvas Layers</h3>
+              <div id="layers-list" class="layers-list">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 3: AI Caption & Hashtag Generator -->
+          <div id="tab-ai" class="tab-pane">
+            <div class="section-block">
+              <h3>🤖 AI Meme Caption Writer</h3>
+              <p class="help-text">Generates funny context-aware meme captions offline or via AI API key.</p>
+
+              <div class="form-group">
+                <label for="ai-category-select">Topic / Vibe</label>
+                <select id="ai-category-select" class="form-control">
+                  <option value="relatable">Everyday Life / Relatable</option>
+                  <option value="tech">Tech & Software Engineering</option>
+                  <option value="work">Workplace & Meetings</option>
+                  <option value="gaming">Gaming & Esports</option>
+                  <option value="crypto">Crypto & Finance</option>
+                  <option value="custom">Custom Prompt...</option>
+                </select>
+              </div>
+
+              <div id="custom-prompt-container" class="form-group hidden">
+                <label for="ai-custom-prompt">Custom Topic / Context</label>
+                <input type="text" id="ai-custom-prompt" class="form-control" placeholder="e.g., Cooking dinner at 2 AM">
+              </div>
+
+              <button id="btn-generate-ai" class="btn btn-accent btn-full">
+                ✨ Generate AI Captions & Hashtags
+              </button>
+
+              <div id="ai-loading" class="loading-spinner hidden">
+                <div class="spinner"></div>
+                <span>Cooking up hilarious captions...</span>
+              </div>
+
+              <div id="ai-results" class="ai-results-box mt-3 hidden">
+                <h4>Suggested Captions:</h4>
+                <div id="ai-captions-list" class="captions-list">
+                  <!-- Generated options -->
+                </div>
+
+                <h4 class="mt-3">Trending Hashtags:</h4>
+                <div id="hashtags-container" class="hashtags-box">
+                  <p id="hashtags-text">#MemeGen #Viral #Funny</p>
+                  <button id="btn-copy-hashtags" class="btn btn-sm btn-secondary">📋 Copy</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Visual Local Gallery Section (IndexedDB) -->
+    <section class="gallery-section">
+      <div class="gallery-header">
+        <h2>🖼️ Local Saved Gallery <span id="gallery-count" class="badge">0</span></h2>
+        <button id="btn-clear-gallery" class="btn btn-sm btn-danger-outline hidden">Clear Gallery</button>
+      </div>
+      <div id="gallery-grid" class="gallery-grid">
+        <p class="empty-gallery">No memes saved yet. Create a meme above and click "Save to Gallery"!</p>
+      </div>
+    </section>
+
+    <!-- API Key Settings Modal -->
+    <div id="api-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>⚙️ AI Provider Settings</h3>
+          <button id="btn-close-modal" class="btn-close">×</button>
+        </div>
+        <div class="modal-body">
+          <p class="help-text">Configure optional cloud AI services for generating captions. If left blank, MemeGen AI automatically uses the built-in offline smart caption engine!</p>
+
+          <div class="form-group">
+            <label for="ai-provider-select">AI Engine Mode</label>
+            <select id="ai-provider-select" class="form-control">
+              <option value="offline">Offline Mock Engine (No Key Needed)</option>
+              <option value="openai">OpenAI (ChatGPT API)</option>
+              <option value="gemini">Google Gemini API</option>
+            </select>
+          </div>
+
+          <div id="api-key-group" class="form-group hidden">
+            <label for="api-key-input">API Key</label>
+            <input type="password" id="api-key-input" class="form-control" placeholder="sk-...">
+            <small class="help-text">Your API key is stored locally in your browser's localStorage and never sent anywhere else.</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-save-api-settings" class="btn btn-primary">Save Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
