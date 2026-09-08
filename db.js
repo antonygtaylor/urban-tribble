@@ -1,5 +1,5 @@
 /**
- * db.js - IndexedDB storage, UK Tax Year utility & Duplicate Detection helper functions
+ * db.js - IndexedDB storage, UK Tax Year utility & Web Crypto AES-256-GCM Encryption Engine
  * UK Tax Document Management PWA
  */
 
@@ -7,14 +7,173 @@
   'use strict';
 
   const DB_NAME = 'UKTaxDocsDB';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2; // Incremented for encryption support
   const STORE_NAME = 'documents';
+  const KEY_STORE_NAME = 'keys';
+
+  let cryptoKeyInstance = null;
+
+  /**
+   * Converts ArrayBuffer to Base64 string
+   */
+  function bufferToBase64(buf) {
+    const bin = String.fromCharCode.apply(null, new Uint8Array(buf));
+    return global.btoa(bin);
+  }
+
+  /**
+   * Converts Base64 string to Uint8Array
+   */
+  function base64ToBuffer(b64) {
+    const bin = global.atob(b64);
+    const len = bin.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = bin.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  /**
+   * Gets or generates the client-side AES-256-GCM encryption key
+   * @returns {Promise<CryptoKey>}
+   */
+  async function getOrCreateCryptoKey() {
+    if (cryptoKeyInstance) return cryptoKeyInstance;
+
+    const db = await initDB();
+
+    // Check if key already exists in key store
+    const existingKeyRaw = await new Promise((resolve) => {
+      const tx = db.transaction(KEY_STORE_NAME, 'readonly');
+      const store = tx.objectStore(KEY_STORE_NAME);
+      const req = store.get('master_aes_key');
+      req.onsuccess = () => resolve(req.result ? req.result.rawKey : null);
+      req.onerror = () => resolve(null);
+    });
+
+    if (existingKeyRaw) {
+      cryptoKeyInstance = await global.crypto.subtle.importKey(
+        'raw',
+        existingKeyRaw,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+      return cryptoKeyInstance;
+    }
+
+    // Generate new AES-GCM 256-bit key
+    cryptoKeyInstance = await global.crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: 256 },
+      true,
+      ['encrypt', 'decrypt']
+    );
+
+    const exportedRaw = await global.crypto.subtle.exportKey('raw', cryptoKeyInstance);
+
+    // Save master key to IDB key store
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(KEY_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(KEY_STORE_NAME);
+      const req = store.put({ id: 'master_aes_key', rawKey: exportedRaw, createdAt: new Date().toISOString() });
+      req.onsuccess = () => resolve(true);
+      req.onerror = (e) => reject(e);
+    });
+
+    return cryptoKeyInstance;
+  }
+
+  /**
+   * Encrypts sensitive record payload using AES-256-GCM
+   * @param {Object} doc
+   * @returns {Promise<Object>} Encrypted storage record
+   */
+  async function encryptRecord(doc) {
+    const key = await getOrCreateCryptoKey();
+    const iv = global.crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV
+
+    const sensitiveData = {
+      grossPay: doc.grossPay,
+      netPay: doc.netPay,
+      taxPaid: doc.taxPaid,
+      nationalInsurance: doc.nationalInsurance,
+      pension: doc.pension,
+      studentLoan: doc.studentLoan,
+      otherDeductions: doc.otherDeductions,
+      totalPay: doc.totalPay,
+      totalTax: doc.totalTax,
+      totalPayToDate: doc.totalPayToDate,
+      totalTaxToDate: doc.totalTaxToDate,
+      totalBenefits: doc.totalBenefits,
+      itemizedBenefits: doc.itemizedBenefits,
+      employerName: doc.employerName,
+      employerDetails: doc.employerDetails,
+      employeeName: doc.employeeName,
+      nino: doc.nino,
+      taxCode: doc.taxCode,
+      finalTaxCode: doc.finalTaxCode,
+      taxCodeAtLeaving: doc.taxCodeAtLeaving,
+      rawText: doc.rawText
+    };
+
+    const jsonStr = JSON.stringify(sensitiveData);
+    const encoded = new TextEncoder().encode(jsonStr);
+
+    const encryptedBuffer = await global.crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: iv },
+      key,
+      encoded
+    );
+
+    return {
+      id: doc.id,
+      docType: doc.docType,
+      taxYear: doc.taxYear,
+      payDate: doc.payDate || doc.leavingDate || '',
+      leavingDate: doc.leavingDate || '',
+      createdAt: doc.createdAt || new Date().toISOString(),
+      updatedAt: doc.updatedAt || new Date().toISOString(),
+      isDuplicate: !!doc.isDuplicate,
+      isEncrypted: true,
+      iv: bufferToBase64(iv),
+      cipherText: bufferToBase64(encryptedBuffer)
+    };
+  }
+
+  /**
+   * Decrypts an encrypted storage record using AES-256-GCM
+   * @param {Object} record
+   * @returns {Promise<Object>} Plain document object
+   */
+  async function decryptRecord(record) {
+    if (!record || !record.isEncrypted || !record.cipherText) {
+      return record; // Return as-is if unencrypted legacy
+    }
+
+    try {
+      const key = await getOrCreateCryptoKey();
+      const iv = base64ToBuffer(record.iv);
+      const cipherBuffer = base64ToBuffer(record.cipherText);
+
+      const decryptedBuffer = await global.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: iv },
+        key,
+        cipherBuffer
+      );
+
+      const jsonStr = new TextDecoder().decode(decryptedBuffer);
+      const sensitiveData = JSON.parse(jsonStr);
+
+      return Object.assign({}, record, sensitiveData);
+    } catch (err) {
+      console.error('Decryption failed for record:', record.id, err);
+      return record;
+    }
+  }
 
   /**
    * Calculates the UK Tax Year for a given date.
-   * UK Tax Year runs from 6th April (Year N) to 5th April (Year N+1).
-   * @param {string|Date} inputDate
-   * @returns {string} Tax year in format "YYYY-YYYY" (e.g. "2025-2026")
    */
   function getTaxYear(inputDate) {
     if (!inputDate) {
@@ -49,9 +208,6 @@
     }
   }
 
-  /**
-   * Determines the UK Tax Month (1 to 12) for a given date.
-   */
   function getTaxMonthNum(inputDate) {
     const date = new Date(inputDate);
     if (isNaN(date.getTime())) return 1;
@@ -68,9 +224,6 @@
     }
   }
 
-  /**
-   * Helper to format currency in GBP (£)
-   */
   function formatCurrency(value) {
     const num = parseFloat(value);
     if (isNaN(num)) return '£0.00';
@@ -80,11 +233,6 @@
     }).format(num);
   }
 
-  /**
-   * Computes a unique signature for a document to identify duplicate uploads.
-   * @param {Object} doc
-   * @returns {string}
-   */
   function getDocSignature(doc) {
     if (!doc) return '';
     const type = (doc.docType || 'payslip').toLowerCase();
@@ -110,18 +258,11 @@
     return `doc_${type}_${emp}`;
   }
 
-  /**
-   * Checks whether a document is a duplicate of an existing record.
-   * @param {Object} doc
-   * @param {Array} existingDocs
-   * @returns {boolean}
-   */
   function isDuplicateRecord(doc, existingDocs) {
     if (!doc || !Array.isArray(existingDocs)) return false;
     const sig = getDocSignature(doc);
 
     return existingDocs.some(existing => {
-      // Don't compare document with itself when updating
       if (doc.id && existing.id === doc.id) return false;
       return getDocSignature(existing) === sig;
     });
@@ -148,6 +289,9 @@
           store.createIndex('payDate', 'payDate', { unique: false });
           store.createIndex('createdAt', 'createdAt', { unique: false });
         }
+        if (!db.objectStoreNames.contains(KEY_STORE_NAME)) {
+          db.createObjectStore(KEY_STORE_NAME, { keyPath: 'id' });
+        }
       };
 
       request.onsuccess = function (event) {
@@ -161,33 +305,35 @@
   }
 
   /**
-   * Saves or updates a document in IndexedDB
+   * Saves or updates an encrypted document in IndexedDB
    */
   async function saveDocument(doc) {
     const db = await initDB();
+    const record = Object.assign({}, doc);
+    if (!record.id) {
+      record.id = 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+    if (!record.createdAt) {
+      record.createdAt = new Date().toISOString();
+    }
+    record.updatedAt = new Date().toISOString();
+
+    if (!record.taxYear) {
+      record.taxYear = getTaxYear(record.payDate || record.leavingDate || record.createdAt);
+    } else {
+      record.taxYear = getTaxYear(record.taxYear);
+    }
+
+    // Encrypt sensitive fields before put
+    const cipherRecord = await encryptRecord(record);
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
-
-      const record = Object.assign({}, doc);
-      if (!record.id) {
-        record.id = 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      }
-      if (!record.createdAt) {
-        record.createdAt = new Date().toISOString();
-      }
-      record.updatedAt = new Date().toISOString();
-
-      if (!record.taxYear) {
-        record.taxYear = getTaxYear(record.payDate || record.leavingDate || record.createdAt);
-      } else {
-        record.taxYear = getTaxYear(record.taxYear);
-      }
-
-      const request = store.put(record);
+      const request = store.put(cipherRecord);
 
       request.onsuccess = function () {
-        resolve(record);
+        resolve(record); // Return plain record object in memory
       };
 
       request.onerror = function (event) {
@@ -197,37 +343,42 @@
   }
 
   /**
-   * Retrieves all documents from IndexedDB
+   * Retrieves and decrypts all documents from IndexedDB
    */
   async function getAllDocuments() {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
+    const cipherDocs = await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const request = store.getAll();
 
       request.onsuccess = function () {
-        const docs = request.result || [];
-        docs.sort((a, b) => {
-          const dateA = new Date(a.payDate || a.leavingDate || a.createdAt);
-          const dateB = new Date(b.payDate || b.leavingDate || b.createdAt);
-          return dateB - dateA;
-        });
-        resolve(docs);
+        resolve(request.result || []);
       };
 
       request.onerror = function (event) {
         reject(event.target.error || new Error('Failed to get documents'));
       };
     });
+
+    // Decrypt all records in parallel
+    const plainDocs = await Promise.all(cipherDocs.map(cDoc => decryptRecord(cDoc)));
+
+    plainDocs.sort((a, b) => {
+      const dateA = new Date(a.payDate || a.leavingDate || a.createdAt);
+      const dateB = new Date(b.payDate || b.leavingDate || b.createdAt);
+      return dateB - dateA;
+    });
+
+    return plainDocs;
   }
 
   /**
-   * Retrieves a document by ID
+   * Retrieves and decrypts a document by ID
    */
   async function getDocumentById(id) {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
+    const cipherDoc = await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const request = store.get(id);
@@ -240,6 +391,9 @@
         reject(event.target.error || new Error('Failed to get document'));
       };
     });
+
+    if (!cipherDoc) return null;
+    return await decryptRecord(cipherDoc);
   }
 
   /**
@@ -289,6 +443,8 @@
     formatCurrency,
     getDocSignature,
     isDuplicateRecord,
+    encryptRecord,
+    decryptRecord,
     initDB,
     saveDocument,
     getAllDocuments,

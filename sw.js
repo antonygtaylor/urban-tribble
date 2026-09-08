@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uk-tax-docs-v1';
+const CACHE_NAME = 'uk-tax-docs-v2';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -7,18 +7,19 @@ const ASSETS_TO_CACHE = [
   './app.js',
   './db.js',
   './ocr.js',
+  './export.js',
   './analytics.js',
   './manifest.json',
   './vendor/chart.min.js',
   './vendor/tesseract.min.js',
   './vendor/worker.min.js',
+  './vendor/xlsx.min.js',
   './vendor/tesseract-core-simd.wasm.js',
   './vendor/tesseract-core-simd.wasm',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
 
-// Install Event - Caches App Shell and Vendor Scripts
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
@@ -28,7 +29,6 @@ self.addEventListener('install', event => {
   );
 });
 
-// Activate Event - Cleans up old caches
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -44,9 +44,7 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch Event - Cache First Strategy for Offline Functionality
 self.addEventListener('fetch', event => {
-  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
@@ -55,7 +53,6 @@ self.addEventListener('fetch', event => {
         return cachedResponse;
       }
       return fetch(event.request).then(response => {
-        // Cache dynamic valid requests if needed
         if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
         }
@@ -65,7 +62,6 @@ self.addEventListener('fetch', event => {
         });
         return response;
       }).catch(() => {
-        // Fallback for HTML page requests when offline
         if (event.request.headers.get('accept').includes('text/html')) {
           return caches.match('./index.html');
         }

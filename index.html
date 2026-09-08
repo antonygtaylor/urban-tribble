@@ -11,25 +11,32 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="styles.css">
+
+  <!-- Core Light App Shell Scripts (Dynamic On-Demand Loading for Heavy Vendors) -->
+  <script src="db.js" defer></script>
+  <script src="ocr.js" defer></script>
+  <script src="export.js" defer></script>
+  <script src="analytics.js" defer></script>
+  <script src="app.js" defer></script>
 </head>
 <body>
   <!-- Header / Navigation Bar -->
-  <header class="app-header">
+  <header class="app-header" role="banner">
     <div class="header-content">
       <div class="brand">
-        <svg class="crown-icon" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+        <svg class="crown-icon" aria-hidden="true" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
           <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/>
         </svg>
         <h1>UK Tax Doc Manager</h1>
       </div>
-      <div id="offlineBadge" class="offline-badge hidden">Offline Mode</div>
+      <div id="offlineBadge" class="offline-badge hidden" aria-live="polite">Offline Mode</div>
     </div>
   </header>
 
   <!-- Mismatch Warning Alert Banner Container -->
-  <div id="mismatchBanner" class="alert-banner warning-banner hidden">
+  <div id="mismatchBanner" class="alert-banner warning-banner hidden" role="alert">
     <div class="alert-content">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" class="alert-icon">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" class="alert-icon" aria-hidden="true">
         <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
       </svg>
       <div class="alert-text">
@@ -37,31 +44,31 @@
         <span id="mismatchMessage"></span>
       </div>
     </div>
-    <button id="btnDismissMismatch" class="btn-dismiss">&times;</button>
+    <button id="btnDismissMismatch" class="btn-dismiss" aria-label="Dismiss warning banner">&times;</button>
   </div>
 
   <!-- Navigation Tabs -->
-  <nav class="nav-tabs">
-    <button class="nav-tab active" data-tab="overviewTab">
-      <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+  <nav class="nav-tabs" aria-label="Main Navigation">
+    <button class="nav-tab active" data-tab="overviewTab" aria-label="Overview Tab">
+      <svg class="tab-icon" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
         <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
       </svg>
       <span>Overview</span>
     </button>
-    <button class="nav-tab" data-tab="scanTab">
-      <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+    <button class="nav-tab" data-tab="scanTab" aria-label="Scan or Add Tab">
+      <svg class="tab-icon" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
         <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
       </svg>
       <span>Scan / Add</span>
     </button>
-    <button class="nav-tab" data-tab="historyTab">
-      <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+    <button class="nav-tab" data-tab="historyTab" aria-label="Records History Tab">
+      <svg class="tab-icon" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
         <path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6a7 7 0 1 1 7 7 6.97 6.97 0 0 1-5-2.14l-1.42 1.42A8.95 8.95 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8z"/>
       </svg>
       <span>Records</span>
     </button>
-    <button class="nav-tab" data-tab="analyticsTab">
-      <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+    <button class="nav-tab" data-tab="analyticsTab" aria-label="Analytics Tab">
+      <svg class="tab-icon" aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
         <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
       </svg>
       <span>Analytics</span>
@@ -69,7 +76,7 @@
   </nav>
 
   <!-- Main Container -->
-  <main class="app-main">
+  <main class="app-main" role="main">
 
     <!-- TAB 0: OVERVIEW DASHBOARD -->
     <section id="overviewTab" class="tab-content active">
@@ -107,10 +114,10 @@
         <div class="card-header-row">
           <h3>Quick Actions</h3>
           <div class="header-controls-row">
-            <button id="btnOverviewRecall" class="btn btn-secondary btn-sm">
+            <button id="btnOverviewRecall" class="btn btn-secondary btn-sm" aria-label="Step through digital payslips">
               🔍 Step-Through Payslips
             </button>
-            <button id="btnOverviewScan" class="btn btn-primary btn-sm">
+            <button id="btnOverviewScan" class="btn btn-primary btn-sm" aria-label="Add new document">
               + Add New Document
             </button>
           </div>
@@ -133,28 +140,28 @@
 
         <div class="upload-options">
           <label for="cameraInput" class="btn btn-primary btn-block">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
               <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/>
             </svg>
             Take Photo with Camera
           </label>
-          <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden-input">
+          <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden-input" aria-label="Take photo with camera">
 
           <label for="fileInput" class="btn btn-secondary btn-block">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
               <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
             </svg>
             Upload Image File
           </label>
-          <input type="file" id="fileInput" accept="image/*" class="hidden-input">
+          <input type="file" id="fileInput" accept="image/*" class="hidden-input" aria-label="Upload image file">
 
-          <button id="btnManualAdd" class="btn btn-outline btn-block">
+          <button id="btnManualAdd" class="btn btn-outline btn-block" aria-label="Manual entry without OCR">
             + Manual Entry (Without OCR)
           </button>
         </div>
 
         <!-- OCR Processing Status Banner -->
-        <div id="ocrStatus" class="ocr-status hidden">
+        <div id="ocrStatus" class="ocr-status hidden" aria-live="polite">
           <div class="spinner"></div>
           <div class="status-info">
             <span id="ocrStatusText" class="status-text">Scanning document...</span>
@@ -167,7 +174,7 @@
         <!-- Image Preview Container -->
         <div id="imagePreviewContainer" class="image-preview-container hidden">
           <h3>Document Preview</h3>
-          <img id="imagePreview" src="" alt="Selected Tax Document Preview">
+          <img id="imagePreview" src="icons/icon-192.png" alt="Selected Tax Document Preview">
         </div>
       </div>
 
@@ -179,10 +186,9 @@
         </div>
         <p class="subtitle">Please verify or correct parsed figures before saving to your offline database.</p>
 
-        <!-- Document Type Selector Override -->
         <div class="form-group">
           <label for="docTypeSelect"><strong>Document Type:</strong></label>
-          <select id="docTypeSelect" class="form-control">
+          <select id="docTypeSelect" class="form-control" aria-label="Select document type">
             <option value="payslip">Payslip</option>
             <option value="p60">P60 (End of Year Certificate)</option>
             <option value="p45">P45 (Details of Employee Leaving)</option>
@@ -207,18 +213,24 @@
         <div class="card-header-row">
           <h2>Document History & Records</h2>
           <div class="header-controls-row">
-            <button id="btnRecordsRecall" class="btn btn-secondary btn-sm">
+            <button id="btnRecordsRecall" class="btn btn-secondary btn-sm" aria-label="Recall payslips">
               🔍 Recall Payslips
             </button>
-            <div class="view-toggle-group">
-              <button id="btnViewCards" class="btn-toggle active" title="Card View">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <button id="btnExportCSV" class="btn btn-outline btn-sm" aria-label="Export CSV spreadsheet">
+              📥 CSV
+            </button>
+            <button id="btnExportXLSX" class="btn btn-outline btn-sm" aria-label="Export Excel XLSX spreadsheet">
+              📊 XLSX
+            </button>
+            <div class="view-toggle-group" role="group" aria-label="Records View Mode">
+              <button id="btnViewCards" class="btn-toggle active" aria-label="Switch to Card View">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
                   <path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>
                 </svg>
                 Cards
               </button>
-              <button id="btnViewTable" class="btn-toggle" title="Table View">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <button id="btnViewTable" class="btn-toggle" aria-label="Switch to Table View">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
                   <path d="M4 15h16v-2H4v2zm0 4h16v-2H4v2zm0-8h16V9H4v2zm0-6v2h16V5H4z"/>
                 </svg>
                 Table
@@ -231,20 +243,24 @@
         <!-- Search & Filter Controls -->
         <div class="filter-bar">
           <div class="form-group filter-item">
-            <input type="text" id="searchInput" class="form-control" placeholder="Search employer, name, tax code...">
+            <label for="searchInput" class="hidden-input">Search input</label>
+            <input type="text" id="searchInput" class="form-control" placeholder="Search employer, name, tax code..." aria-label="Search documents">
           </div>
           <div class="form-group filter-item">
-            <select id="filterTaxYear" class="form-control">
+            <label for="filterTaxYear" class="hidden-input">Filter tax year</label>
+            <select id="filterTaxYear" class="form-control" aria-label="Filter by tax year">
               <option value="all">All Tax Years</option>
             </select>
           </div>
           <div class="form-group filter-item">
-            <select id="filterEmployer" class="form-control">
+            <label for="filterEmployer" class="hidden-input">Filter employer</label>
+            <select id="filterEmployer" class="form-control" aria-label="Filter by employer">
               <option value="all">All Employers</option>
             </select>
           </div>
           <div class="form-group filter-item">
-            <select id="filterDocType" class="form-control">
+            <label for="filterDocType" class="hidden-input">Filter document type</label>
+            <select id="filterDocType" class="form-control" aria-label="Filter by document type">
               <option value="all">All Document Types</option>
               <option value="payslip">Payslips</option>
               <option value="p60">P60</option>
@@ -254,7 +270,7 @@
           </div>
         </div>
 
-        <!-- Records List Container (Card / Table) -->
+        <!-- Records List Container -->
         <div id="recordsList" class="records-list"></div>
       </div>
     </section>
@@ -265,18 +281,25 @@
         <div class="card-header-row">
           <h2>Tax & Income Analytics</h2>
           <div class="header-controls-row">
-            <select id="analyticsTaxYear" class="form-control inline-select">
+            <select id="analyticsTaxYear" class="form-control inline-select" aria-label="Filter analytics by tax year">
               <option value="all">All Tax Years</option>
             </select>
-            <button id="btnToggleAnalyticsTable" class="btn btn-outline btn-sm">
-              Show Data Table
-            </button>
+            <button id="btnExportAnalyticsCSV" class="btn btn-outline btn-sm" aria-label="Export Analytics CSV">Export CSV</button>
+            <button id="btnExportAnalyticsXLSX" class="btn btn-outline btn-sm" aria-label="Export Analytics XLSX">Export XLSX</button>
+            <button id="btnToggleAnalyticsTable" class="btn btn-outline btn-sm" aria-label="Toggle analytics data table">Show Data Table</button>
           </div>
         </div>
         <p class="subtitle">Financial trends, tax breakdowns, and P60 reconciliation</p>
 
         <!-- Numerical Reconciliation Summary Card -->
         <div id="reconciliationSummary" class="reconciliation-summary-container"></div>
+      </div>
+
+      <!-- UK Wage & Inflation Benchmarking Insights Card -->
+      <div class="card">
+        <h3>Practical UK Wage & Inflation Benchmarking Insights</h3>
+        <p class="subtitle">Comparing your annual earnings progression against UK National Living Wage, UK Median Earnings, and CPI Inflation</p>
+        <div id="wageInsightsCard" class="wage-insights-container"></div>
       </div>
 
       <!-- Analytics Structured Table View Container -->
@@ -288,10 +311,18 @@
       <!-- Charts Grid -->
       <div class="charts-grid">
         <div class="card chart-card">
+          <h3>Income Progression vs UK Benchmarks</h3>
+          <p class="chart-desc">Your earnings progression vs UK Median Wage, Living Wage & NMW</p>
+          <div class="chart-wrapper">
+            <canvas id="chartWageBenchmark" aria-label="Income Progression vs UK Benchmarks Chart" role="img"></canvas>
+          </div>
+        </div>
+
+        <div class="card chart-card">
           <h3>Income & Deductions Timeline</h3>
           <p class="chart-desc">Gross vs. Net Pay and Total Deductions across months</p>
           <div class="chart-wrapper">
-            <canvas id="chartTimeline"></canvas>
+            <canvas id="chartTimeline" aria-label="Income and Deductions Timeline Chart" role="img"></canvas>
           </div>
         </div>
 
@@ -299,7 +330,7 @@
           <h3>Deduction Breakdown</h3>
           <p class="chart-desc">PAYE Tax, NI, Pension, and Student Loan splits</p>
           <div class="chart-wrapper">
-            <canvas id="chartDeductions"></canvas>
+            <canvas id="chartDeductions" aria-label="Deduction Breakdown Chart" role="img"></canvas>
           </div>
         </div>
 
@@ -307,7 +338,7 @@
           <h3>Annual Tax Reconciliation (P60 vs Payslips)</h3>
           <p class="chart-desc">Comparing P60 total figures with accumulated monthly payslips</p>
           <div class="chart-wrapper">
-            <canvas id="chartP60Reconciliation"></canvas>
+            <canvas id="chartP60Reconciliation" aria-label="Annual Tax Reconciliation Chart" role="img"></canvas>
           </div>
         </div>
 
@@ -315,7 +346,7 @@
           <h3>P11D Benefits in Kind Impact</h3>
           <p class="chart-desc">Visual breakdown of taxable employee benefits</p>
           <div class="chart-wrapper">
-            <canvas id="chartBenefits"></canvas>
+            <canvas id="chartBenefits" aria-label="P11D Benefits Impact Chart" role="img"></canvas>
           </div>
         </div>
       </div>
@@ -323,7 +354,7 @@
   </main>
 
   <!-- STEP-THROUGH DIGITAL PAYSLIP RECALL MODAL -->
-  <div id="recallModal" class="modal hidden">
+  <div id="recallModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Digital Payslip Recall Viewer">
     <div class="modal-overlay"></div>
     <div class="modal-card payslip-recall-card">
       <div class="modal-header">
@@ -331,48 +362,39 @@
           <h3>Digital Payslip Recall Viewer</h3>
           <span id="recallStepIndicator" class="recall-counter">Payslip 1 of 1</span>
         </div>
-        <button id="btnRecallClose" class="btn-icon">&times;</button>
+        <button id="btnRecallClose" class="btn-icon" aria-label="Close recall viewer">&times;</button>
       </div>
 
       <div class="modal-body">
-        <!-- Rendered Digital UK Payslip -->
         <div id="payslipSheet" class="payslip-sheet"></div>
       </div>
 
       <div class="modal-footer recall-footer">
-        <button id="btnPrevPayslip" class="btn btn-outline">&larr; Previous</button>
-        <button id="btnNextPayslip" class="btn btn-outline">Next &rarr;</button>
-        <button id="btnRecallDone" class="btn btn-primary">Close Viewer</button>
+        <button id="btnPrevPayslip" class="btn btn-outline" aria-label="Previous payslip">&larr; Previous</button>
+        <button id="btnNextPayslip" class="btn btn-outline" aria-label="Next payslip">Next &rarr;</button>
+        <button id="btnRecallDone" class="btn btn-primary" aria-label="Close viewer">Close Viewer</button>
       </div>
     </div>
   </div>
 
   <!-- EDIT / VIEW DETAIL MODAL -->
-  <div id="detailModal" class="modal hidden">
+  <div id="detailModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Document Edit Modal">
     <div class="modal-overlay"></div>
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="modalTitle">Document Details</h3>
-        <button id="btnModalClose" class="btn-icon">&times;</button>
+        <button id="btnModalClose" class="btn-icon" aria-label="Close edit modal">&times;</button>
       </div>
       <div id="modalBody" class="modal-body"></div>
       <div class="modal-footer">
-        <button id="btnModalSave" class="btn btn-primary">Update</button>
-        <button id="btnModalDelete" class="btn btn-danger">Delete Document</button>
-        <button id="btnModalCancel" class="btn btn-outline">Close</button>
+        <button id="btnModalSave" class="btn btn-primary" aria-label="Update document">Update</button>
+        <button id="btnModalDelete" class="btn btn-danger" aria-label="Delete document">Delete Document</button>
+        <button id="btnModalCancel" class="btn btn-outline" aria-label="Cancel editing">Close</button>
       </div>
     </div>
   </div>
 
   <!-- Toast Notification Container -->
-  <div id="toast" class="toast hidden"></div>
-
-  <!-- Load Scripts Global Scope -->
-  <script src="vendor/chart.min.js"></script>
-  <script src="vendor/tesseract.min.js"></script>
-  <script src="db.js"></script>
-  <script src="ocr.js"></script>
-  <script src="analytics.js"></script>
-  <script src="app.js"></script>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 </body>
 </html>

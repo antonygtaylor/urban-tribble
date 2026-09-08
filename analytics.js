@@ -1,22 +1,33 @@
 /**
- * analytics.js - Chart.js Visualizations & Tax Reconciliation Summary
+ * analytics.js - Chart.js Visualizations & UK Wage/Inflation Benchmarking Insights Engine
  * UK Tax Document Management PWA
  */
 
 (function (global) {
   'use strict';
 
-  // Holds active Chart instances to allow updating / destroying on re-render
+  // Active Chart.js instances
   const activeCharts = {
     timelineChart: null,
     deductionChart: null,
     p60ReconciliationChart: null,
-    benefitsChart: null
+    benefitsChart: null,
+    wageBenchmarkChart: null
   };
 
   /**
-   * Helper to destroy an existing chart instance before creating a new one
+   * Official UK Benchmark Reference Datasets (2020 to 2026)
+   * Annual equivalent based on 37.5 hrs/wk (1,950 hrs/yr)
    */
+  const UK_BENCHMARKS = {
+    '2020-2021': { nmw: 17004, realLivingWage: 18525, ukMedianWage: 31461, cpiRate: 0.8 },
+    '2021-2022': { nmw: 17374, realLivingWage: 19305, ukMedianWage: 31285, cpiRate: 2.5 },
+    '2022-2023': { nmw: 18525, realLivingWage: 21255, ukMedianWage: 33000, cpiRate: 9.1 },
+    '2023-2024': { nmw: 20319, realLivingWage: 23400, ukMedianWage: 34963, cpiRate: 7.3 },
+    '2024-2025': { nmw: 22308, realLivingWage: 24570, ukMedianWage: 37430, cpiRate: 3.2 },
+    '2025-2026': { nmw: 23809, realLivingWage: 27007, ukMedianWage: 39100, cpiRate: 2.5 }
+  };
+
   function destroyChart(chartKey) {
     if (activeCharts[chartKey]) {
       activeCharts[chartKey].destroy();
@@ -24,13 +35,6 @@
     }
   }
 
-  /**
-   * Filter documents by tax year and exclude duplicate records from calculations
-   * @param {Array} documents
-   * @param {string} selectedTaxYear e.g., 'all' or '2025-2026'
-   * @param {boolean} excludeDuplicates Default true
-   * @returns {Array}
-   */
   function filterDocsByTaxYear(documents, selectedTaxYear, excludeDuplicates = true) {
     let docs = documents || [];
     if (excludeDuplicates) {
@@ -43,9 +47,7 @@
   }
 
   /**
-   * Renders the 4 required interactive charts and tax reconciliation summary
-   * @param {Array} documents List of all stored document objects
-   * @param {string} selectedTaxYear Tax Year filter (e.g. "2025-2026" or "all")
+   * Main render function
    */
   function renderAnalytics(documents, selectedTaxYear) {
     if (typeof Chart === 'undefined') {
@@ -59,12 +61,12 @@
     renderDeductionBreakdownChart(docs);
     renderP60ReconciliationChart(docs);
     renderBenefitsImpactChart(docs);
+    renderWageBenchmarkChart(documents); // Uses all documents to plot year-over-year progression
     renderReconciliationSummaryCard(docs);
+    renderWageInsightsCard(documents);
   }
 
-  /**
-   * 1. Income & Deductions Timeline (Line chart tracking Gross vs. Net Pay and Total Deductions)
-   */
+  /* 1. Timeline Chart */
   function renderTimelineChart(docs) {
     destroyChart('timelineChart');
     const canvas = document.getElementById('chartTimeline');
@@ -134,20 +136,13 @@
           }
         },
         scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              callback: (val) => '£' + val
-            }
-          }
+          y: { beginAtZero: true, ticks: { callback: (val) => '£' + val } }
         }
       }
     });
   }
 
-  /**
-   * 2. Deduction Breakdown (Stacked bar chart showing PAYE, NI, Pension, and Student Loan splits)
-   */
+  /* 2. Deduction Breakdown Chart */
   function renderDeductionBreakdownChart(docs) {
     destroyChart('deductionChart');
     const canvas = document.getElementById('chartDeductions');
@@ -176,31 +171,11 @@
       data: {
         labels: labels.length > 0 ? labels : ['No Data'],
         datasets: [
-          {
-            label: 'PAYE Tax (£)',
-            data: payeData.length > 0 ? payeData : [0],
-            backgroundColor: '#d4351c'
-          },
-          {
-            label: 'National Insurance (£)',
-            data: niData.length > 0 ? niData : [0],
-            backgroundColor: '#f47738'
-          },
-          {
-            label: 'Pension (£)',
-            data: pensionData.length > 0 ? pensionData : [0],
-            backgroundColor: '#1d70b8'
-          },
-          {
-            label: 'Student Loan (£)',
-            data: studentLoanData.length > 0 ? studentLoanData : [0],
-            backgroundColor: '#4c2c92'
-          },
-          {
-            label: 'Other Deductions (£)',
-            data: otherData.length > 0 ? otherData : [0],
-            backgroundColor: '#505a5f'
-          }
+          { label: 'PAYE Tax (£)', data: payeData.length > 0 ? payeData : [0], backgroundColor: '#d4351c' },
+          { label: 'National Insurance (£)', data: niData.length > 0 ? niData : [0], backgroundColor: '#f47738' },
+          { label: 'Pension (£)', data: pensionData.length > 0 ? pensionData : [0], backgroundColor: '#1d70b8' },
+          { label: 'Student Loan (£)', data: studentLoanData.length > 0 ? studentLoanData : [0], backgroundColor: '#4c2c92' },
+          { label: 'Other Deductions (£)', data: otherData.length > 0 ? otherData : [0], backgroundColor: '#505a5f' }
         ]
       },
       options: {
@@ -208,29 +183,17 @@
         maintainAspectRatio: false,
         plugins: {
           legend: { position: 'bottom' },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: £${ctx.parsed.y.toFixed(2)}`
-            }
-          }
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: £${ctx.parsed.y.toFixed(2)}` } }
         },
         scales: {
           x: { stacked: true },
-          y: {
-            stacked: true,
-            beginAtZero: true,
-            ticks: {
-              callback: (val) => '£' + val
-            }
-          }
+          y: { stacked: true, beginAtZero: true, ticks: { callback: (val) => '£' + val } }
         }
       }
     });
   }
 
-  /**
-   * 3. Annual Tax Summary (Comparing P60 total figures against accumulated monthly payslip totals)
-   */
+  /* 3. P60 Reconciliation Chart */
   function renderP60ReconciliationChart(docs) {
     destroyChart('p60ReconciliationChart');
     const canvas = document.getElementById('chartP60Reconciliation');
@@ -249,16 +212,8 @@
       data: {
         labels: ['Total Pay / Gross', 'Total Tax / PAYE'],
         datasets: [
-          {
-            label: 'Accumulated Payslips (£)',
-            data: [accumulatedGross, accumulatedTax],
-            backgroundColor: '#005ea5'
-          },
-          {
-            label: 'P60 Certificate Totals (£)',
-            data: [p60TotalPay, p60TotalTax],
-            backgroundColor: '#28a745'
-          }
+          { label: 'Accumulated Payslips (£)', data: [accumulatedGross, accumulatedTax], backgroundColor: '#005ea5' },
+          { label: 'P60 Certificate Totals (£)', data: [p60TotalPay, p60TotalTax], backgroundColor: '#28a745' }
         ]
       },
       options: {
@@ -266,27 +221,14 @@
         maintainAspectRatio: false,
         plugins: {
           legend: { position: 'bottom' },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: £${ctx.parsed.y.toFixed(2)}`
-            }
-          }
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: £${ctx.parsed.y.toFixed(2)}` } }
         },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              callback: (val) => '£' + val
-            }
-          }
-        }
+        scales: { y: { beginAtZero: true, ticks: { callback: (val) => '£' + val } } }
       }
     });
   }
 
-  /**
-   * 4. Benefits Impact (Visual breakdown of taxable P11D benefits in kind)
-   */
+  /* 4. Benefits Impact Chart */
   function renderBenefitsImpactChart(docs) {
     destroyChart('benefitsChart');
     const canvas = document.getElementById('chartBenefits');
@@ -318,16 +260,8 @@
       data: {
         labels: ['Company Car', 'Private Medical', 'Relocation', 'Fuel Allowance', 'Other Benefits'],
         datasets: [{
-          data: totalCalculated > 0
-            ? [companyCar, privateMedical, relocation, fuelAllowance, otherBenefits]
-            : [0, 0, 0, 0, 0],
-          backgroundColor: [
-            '#005ea5',
-            '#00703c',
-            '#f47738',
-            '#4c2c92',
-            '#505a5f'
-          ]
+          data: totalCalculated > 0 ? [companyCar, privateMedical, relocation, fuelAllowance, otherBenefits] : [0, 0, 0, 0, 0],
+          backgroundColor: ['#005ea5', '#00703c', '#f47738', '#4c2c92', '#505a5f']
         }]
       },
       options: {
@@ -335,19 +269,95 @@
         maintainAspectRatio: false,
         plugins: {
           legend: { position: 'bottom' },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => `${ctx.label}: £${ctx.parsed.toFixed(2)}`
-            }
-          }
+          tooltip: { callbacks: { label: (ctx) => `${ctx.label}: £${ctx.parsed.toFixed(2)}` } }
         }
       }
     });
   }
 
-  /**
-   * Render reconciliation numerical callout cards
-   */
+  /* 5. Income Progression vs UK Wage & Inflation Benchmarks Chart */
+  function renderWageBenchmarkChart(allDocuments) {
+    destroyChart('wageBenchmarkChart');
+    const canvas = document.getElementById('chartWageBenchmark');
+    if (!canvas) return;
+
+    const validDocs = (allDocuments || []).filter(d => !d.isDuplicate);
+
+    // Group earnings by Tax Year
+    const taxYearsList = Object.keys(UK_BENCHMARKS);
+    const userAnnualEarnings = {};
+
+    taxYearsList.forEach(ty => { userAnnualEarnings[ty] = 0; });
+
+    validDocs.forEach(doc => {
+      const ty = doc.taxYear || '2025-2026';
+      if (doc.docType === 'p60' && doc.totalPay > 0) {
+        userAnnualEarnings[ty] = Math.max(userAnnualEarnings[ty], Number(doc.totalPay));
+      } else if (doc.docType === 'payslip') {
+        userAnnualEarnings[ty] += Number(doc.grossPay || 0);
+      }
+    });
+
+    const userData = taxYearsList.map(ty => userAnnualEarnings[ty] || 0);
+    const nmwData = taxYearsList.map(ty => UK_BENCHMARKS[ty].nmw);
+    const rlwData = taxYearsList.map(ty => UK_BENCHMARKS[ty].realLivingWage);
+    const medianData = taxYearsList.map(ty => UK_BENCHMARKS[ty].ukMedianWage);
+
+    activeCharts.wageBenchmarkChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: taxYearsList,
+        datasets: [
+          {
+            label: 'Your Annual Gross (£)',
+            data: userData,
+            borderColor: '#00703c',
+            backgroundColor: 'rgba(0, 112, 60, 0.15)',
+            borderWidth: 3,
+            tension: 0.2,
+            fill: true
+          },
+          {
+            label: 'UK Median Wage (£37,430)',
+            data: medianData,
+            borderColor: '#005ea5',
+            borderDash: [5, 5],
+            borderWidth: 2,
+            fill: false
+          },
+          {
+            label: 'Real Living Wage (£27,007)',
+            data: rlwData,
+            borderColor: '#f47738',
+            borderDash: [3, 3],
+            borderWidth: 2,
+            fill: false
+          },
+          {
+            label: 'National Minimum Wage (£23,809)',
+            data: nmwData,
+            borderColor: '#d4351c',
+            borderDash: [2, 2],
+            borderWidth: 2,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: £${ctx.parsed.y.toLocaleString('en-GB')}` } }
+        },
+        scales: {
+          y: { beginAtZero: false, ticks: { callback: (val) => '£' + val } }
+        }
+      }
+    });
+  }
+
+  /* Summary Card */
   function renderReconciliationSummaryCard(docs) {
     const summaryElem = document.getElementById('reconciliationSummary');
     if (!summaryElem) return;
@@ -362,10 +372,8 @@
     const totalPayslipNet = payslips.reduce((s, d) => s + Number(d.netPay || 0), 0);
 
     const totalP60Pay = p60Docs.reduce((s, d) => s + Number(d.totalPay || 0), 0);
-    const totalP60Tax = p60Docs.reduce((s, d) => s + Number(d.totalTax || 0), 0);
 
     const totalP11DBenefits = p11dDocs.reduce((s, d) => s + Number(d.totalBenefits || 0), 0);
-
     const payDiff = totalP60Pay > 0 ? (totalP60Pay - totalPayslipGross) : 0;
 
     summaryElem.innerHTML = `
@@ -399,10 +407,83 @@
     `;
   }
 
+  /* Practical UK Wage & Inflation Benchmarking Insights Card */
+  function renderWageInsightsCard(allDocuments) {
+    const card = document.getElementById('wageInsightsCard');
+    if (!card) return;
+
+    const validDocs = (allDocuments || []).filter(d => !d.isDuplicate);
+    if (validDocs.length === 0) {
+      card.innerHTML = `
+        <p class="subtitle">Upload or scan payslips and P60s to unlock personalized UK wage benchmarking and inflation stats.</p>
+      `;
+      return;
+    }
+
+    // Determine latest tax year user earnings
+    const currentTY = '2024-2025';
+    const benchmark = UK_BENCHMARKS[currentTY] || UK_BENCHMARKS['2025-2026'];
+
+    // Calculate user annualized gross
+    let userGross = 0;
+    const payslips = validDocs.filter(d => d.docType === 'payslip');
+    const p60s = validDocs.filter(d => d.docType === 'p60');
+
+    if (p60s.length > 0) {
+      userGross = Math.max(...p60s.map(p => Number(p.totalPay || 0)));
+    } else if (payslips.length > 0) {
+      const avgGross = payslips.reduce((s, p) => s + Number(p.grossPay || 0), 0) / payslips.length;
+      userGross = avgGross * 12; // Annualized
+    }
+
+    const diffVsMedian = userGross - benchmark.ukMedianWage;
+    const pctVsMedian = Math.round((diffVsMedian / benchmark.ukMedianWage) * 100);
+
+    const diffVsLiving = userGross - benchmark.realLivingWage;
+    const diffVsMinimum = userGross - benchmark.nmw;
+
+    const hourlyEquiv = (userGross / 1950).toFixed(2); // 37.5 hrs/wk standard
+
+    let medianText = '';
+    if (pctVsMedian >= 0) {
+      medianText = `<span class="stat-highlight-green">+${pctVsMedian}% ABOVE</span> the UK Median Average Wage (${TaxDB.formatCurrency(benchmark.ukMedianWage)}).`;
+    } else {
+      medianText = `<span class="stat-highlight-orange">${Math.abs(pctVsMedian)}% BELOW</span> the UK Median Average Wage (${TaxDB.formatCurrency(benchmark.ukMedianWage)}).`;
+    }
+
+    let livingText = '';
+    if (diffVsLiving >= 0) {
+      livingText = `Outpacing the Real Living Wage (${TaxDB.formatCurrency(benchmark.realLivingWage)}) by <strong style="color:var(--gov-green);">${TaxDB.formatCurrency(diffVsLiving)}/yr</strong>.`;
+    } else {
+      livingText = `Trailing the Real Living Wage target by ${TaxDB.formatCurrency(Math.abs(diffVsLiving))}/yr.`;
+    }
+
+    card.innerHTML = `
+      <div class="insights-grid">
+        <div class="insight-box">
+          <span class="insight-title">VS. UK AVERAGE MEDIAN WAGE</span>
+          <div class="insight-value">${TaxDB.formatCurrency(userGross)} /yr</div>
+          <p class="insight-desc">Your annualized wage is ${medianText}</p>
+        </div>
+        <div class="insight-box">
+          <span class="insight-title">REAL LIVING WAGE & NMW BUFFER</span>
+          <div class="insight-value">~£${hourlyEquiv} /hr</div>
+          <p class="insight-desc">${livingText} (${TaxDB.formatCurrency(diffVsMinimum)} buffer over National Minimum Wage).</p>
+        </div>
+        <div class="insight-box">
+          <span class="insight-title">INFLATION & PURCHASING POWER</span>
+          <div class="insight-value">CPI Inflation: ~${benchmark.cpiRate}%</div>
+          <p class="insight-desc">UK CPI inflation rate for benchmark reference. Pay increases above this rate represent real income growth.</p>
+        </div>
+      </div>
+    `;
+  }
+
   // Export
   global.TaxAnalytics = {
     renderAnalytics,
-    filterDocsByTaxYear
+    filterDocsByTaxYear,
+    UK_BENCHMARKS
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

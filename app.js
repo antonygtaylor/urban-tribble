@@ -17,6 +17,41 @@
   let recallPayslipsList = [];
   let currentRecallIndex = 0;
 
+  // Script Loader Cache
+  const loadedScripts = {};
+
+  /**
+   * Dynamically loads a script on-demand
+   */
+  function loadScript(src) {
+    if (loadedScripts[src]) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = () => {
+        loadedScripts[src] = true;
+        resolve();
+      };
+      script.onerror = () => reject(new Error(`Failed to load script ${src}`));
+      document.head.appendChild(script);
+    });
+  }
+
+  /**
+   * HTML Sanitizer to prevent XSS exploits
+   */
+  function escapeHTML(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   // DOM Elements
   const navTabs = document.querySelectorAll('.nav-tab');
   const tabContents = document.querySelectorAll('.tab-content');
@@ -64,10 +99,14 @@
   const btnViewCards = document.getElementById('btnViewCards');
   const btnViewTable = document.getElementById('btnViewTable');
   const btnRecordsRecall = document.getElementById('btnRecordsRecall');
+  const btnExportCSV = document.getElementById('btnExportCSV');
+  const btnExportXLSX = document.getElementById('btnExportXLSX');
 
   // Analytics
   const analyticsTaxYear = document.getElementById('analyticsTaxYear');
   const btnToggleAnalyticsTable = document.getElementById('btnToggleAnalyticsTable');
+  const btnExportAnalyticsCSV = document.getElementById('btnExportAnalyticsCSV');
+  const btnExportAnalyticsXLSX = document.getElementById('btnExportAnalyticsXLSX');
   const analyticsTableContainer = document.getElementById('analyticsTableContainer');
   const analyticsTableContent = document.getElementById('analyticsTableContent');
 
@@ -102,6 +141,7 @@
     setupImageHandlers();
     setupReviewForm();
     setupFiltersAndViewToggles();
+    setupExportHandlers();
     setupRecallViewer();
     setupModal();
     setupMismatchBanner();
@@ -133,7 +173,7 @@
     }, duration);
   }
 
-  /* Tab Navigation */
+  /* Navigation Tabs */
   function setupNavigation() {
     navTabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -143,7 +183,7 @@
     });
   }
 
-  function switchTab(targetTabId) {
+  async function switchTab(targetTabId) {
     navTabs.forEach(t => t.classList.remove('active'));
     tabContents.forEach(c => c.classList.remove('active'));
 
@@ -156,6 +196,10 @@
     if (targetTabId === 'overviewTab') {
       renderOverviewTab();
     } else if (targetTabId === 'analyticsTab') {
+      // Lazy load Chart.js when entering Analytics tab
+      if (typeof Chart === 'undefined') {
+        await loadScript('vendor/chart.min.js');
+      }
       TaxAnalytics.renderAnalytics(allStoredDocuments, analyticsTaxYear.value);
       if (isAnalyticsTableVisible) renderAnalyticsTable();
     } else if (targetTabId === 'historyTab') {
@@ -176,6 +220,40 @@
     }
   }
 
+  /* Export Handlers */
+  function setupExportHandlers() {
+    if (btnExportCSV) {
+      btnExportCSV.addEventListener('click', () => {
+        TaxExport.exportToCSV(allStoredDocuments);
+        showToast('CSV export downloaded');
+      });
+    }
+    if (btnExportXLSX) {
+      btnExportXLSX.addEventListener('click', async () => {
+        if (typeof XLSX === 'undefined') {
+          await loadScript('vendor/xlsx.min.js');
+        }
+        TaxExport.exportToXLSX(allStoredDocuments);
+        showToast('XLSX export downloaded');
+      });
+    }
+    if (btnExportAnalyticsCSV) {
+      btnExportAnalyticsCSV.addEventListener('click', () => {
+        TaxExport.exportToCSV(allStoredDocuments);
+        showToast('CSV export downloaded');
+      });
+    }
+    if (btnExportAnalyticsXLSX) {
+      btnExportAnalyticsXLSX.addEventListener('click', async () => {
+        if (typeof XLSX === 'undefined') {
+          await loadScript('vendor/xlsx.min.js');
+        }
+        TaxExport.exportToXLSX(allStoredDocuments);
+        showToast('XLSX export downloaded');
+      });
+    }
+  }
+
   /* Load Documents & Check Mismatches */
   async function loadDocumentsAndRender() {
     try {
@@ -186,6 +264,9 @@
       checkAndShowEmployeeMismatches();
 
       if (document.getElementById('analyticsTab').classList.contains('active')) {
+        if (typeof Chart === 'undefined') {
+          await loadScript('vendor/chart.min.js');
+        }
         TaxAnalytics.renderAnalytics(allStoredDocuments, analyticsTaxYear.value);
         if (isAnalyticsTableVisible) renderAnalyticsTable();
       }
@@ -195,7 +276,7 @@
     }
   }
 
-  /* Employee Mismatch Detection Banner (Show once per unique mismatch) */
+  /* Employee Mismatch Banner */
   function setupMismatchBanner() {
     btnDismissMismatch.addEventListener('click', () => {
       mismatchBanner.classList.add('hidden');
@@ -261,7 +342,6 @@
     const employerGroups = {};
 
     allStoredDocuments.forEach(doc => {
-      // Exclude duplicates from portfolio summary totals
       if (doc.isDuplicate) return;
 
       const empName = doc.employerName || doc.employerDetails || 'Unknown Employer';
@@ -297,13 +377,14 @@
     let empHtml = '';
     Object.keys(employerGroups).forEach(emp => {
       const group = employerGroups[emp];
+      const safeEmp = escapeHTML(emp);
       empHtml += `
         <div class="employer-card">
           <div>
-            <div class="employer-name">${emp}</div>
+            <div class="employer-name">${safeEmp}</div>
             <div class="employer-stats">${group.count} record(s)</div>
           </div>
-          <button class="btn btn-outline btn-sm btn-filter-employer" data-employer="${emp}">
+          <button class="btn btn-outline btn-sm btn-filter-employer" data-employer="${safeEmp}">
             View Records
           </button>
         </div>
@@ -343,7 +424,7 @@
       sortedYears.forEach(year => {
         const opt = document.createElement('option');
         opt.value = year;
-        opt.textContent = `Tax Year ${year}`;
+        opt.textContent = `Tax Year ${escapeHTML(year)}`;
         select.appendChild(opt);
       });
       select.value = currentVal;
@@ -378,6 +459,11 @@
 
   async function handleImageFile(file) {
     if (!file) return;
+
+    // Lazy load Tesseract.js when user picks an image
+    if (typeof Tesseract === 'undefined') {
+      await loadScript('vendor/tesseract.min.js');
+    }
 
     const imageUrl = URL.createObjectURL(file);
     imagePreview.src = imageUrl;
@@ -416,7 +502,7 @@
     }
   }
 
-  /* Setup Review Form & Duplicate Check */
+  /* Review Form */
   function setupReviewForm() {
     docTypeSelect.addEventListener('change', () => {
       const selectedType = docTypeSelect.value;
@@ -460,7 +546,6 @@
       const targetDate = record.payDate || record.leavingDate || new Date();
       record.taxYear = record.taxYear || TaxDB.getTaxYear(targetDate);
 
-      // Duplicate Detection Check
       const isDup = TaxDB.isDuplicateRecord(record, allStoredDocuments);
       if (isDup) {
         record.isDuplicate = true;
@@ -494,15 +579,15 @@
       html = `
         <div class="form-group">
           <label for="f_payDate">Pay Date *</label>
-          <input type="date" id="f_payDate" name="payDate" class="form-control" value="${data.payDate || new Date().toISOString().split('T')[0]}" required>
+          <input type="date" id="f_payDate" name="payDate" class="form-control" value="${escapeHTML(data.payDate || new Date().toISOString().split('T')[0])}" required>
         </div>
         <div class="form-group">
           <label for="f_employerName">Employer Name</label>
-          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${data.employerName || ''}" placeholder="e.g. ACME UK Ltd">
+          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${escapeHTML(data.employerName || '')}" placeholder="e.g. ACME UK Ltd">
         </div>
         <div class="form-group">
           <label for="f_employeeName">Employee Name</label>
-          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${data.employeeName || ''}" placeholder="e.g. Jane Doe">
+          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${escapeHTML(data.employeeName || '')}" placeholder="e.g. Jane Doe">
         </div>
         <div class="form-group">
           <label for="f_grossPay">Gross Pay (£) *</label>
@@ -534,30 +619,30 @@
         </div>
         <div class="form-group">
           <label for="f_taxCode">Tax Code</label>
-          <input type="text" id="f_taxCode" name="taxCode" class="form-control" value="${data.taxCode || '1257L'}">
+          <input type="text" id="f_taxCode" name="taxCode" class="form-control" value="${escapeHTML(data.taxCode || '1257L')}">
         </div>
         <div class="form-group">
           <label for="f_nino">NI Number (NINO)</label>
-          <input type="text" id="f_nino" name="nino" class="form-control" value="${data.nino || ''}" placeholder="e.g. QQ123456A">
+          <input type="text" id="f_nino" name="nino" class="form-control" value="${escapeHTML(data.nino || '')}" placeholder="e.g. QQ123456A">
         </div>
         <div class="form-group">
           <label for="f_taxWeekMonth">Tax Week / Month</label>
-          <input type="text" id="f_taxWeekMonth" name="taxWeekMonth" class="form-control" value="${data.taxWeekMonth || ''}" placeholder="e.g. Month 2">
+          <input type="text" id="f_taxWeekMonth" name="taxWeekMonth" class="form-control" value="${escapeHTML(data.taxWeekMonth || '')}" placeholder="e.g. Month 2">
         </div>
       `;
     } else if (docType === 'p60') {
       html = `
         <div class="form-group">
           <label for="f_taxYear">Tax Year *</label>
-          <input type="text" id="f_taxYear" name="taxYear" class="form-control" value="${data.taxYear || TaxDB.getTaxYear(new Date())}" placeholder="2025-2026" required>
+          <input type="text" id="f_taxYear" name="taxYear" class="form-control" value="${escapeHTML(data.taxYear || TaxDB.getTaxYear(new Date()))}" placeholder="2025-2026" required>
         </div>
         <div class="form-group">
           <label for="f_employerName">Employer Details</label>
-          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${data.employerName || data.employerDetails || ''}">
+          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${escapeHTML(data.employerName || data.employerDetails || '')}">
         </div>
         <div class="form-group">
           <label for="f_employeeName">Employee Name</label>
-          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${data.employeeName || ''}">
+          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${escapeHTML(data.employeeName || '')}">
         </div>
         <div class="form-group">
           <label for="f_totalPay">Total Pay in Year (£) *</label>
@@ -569,26 +654,26 @@
         </div>
         <div class="form-group">
           <label for="f_finalTaxCode">Final Tax Code</label>
-          <input type="text" id="f_finalTaxCode" name="finalTaxCode" class="form-control" value="${data.finalTaxCode || '1257L'}">
+          <input type="text" id="f_finalTaxCode" name="finalTaxCode" class="form-control" value="${escapeHTML(data.finalTaxCode || '1257L')}">
         </div>
         <div class="form-group">
           <label for="f_nino">NI Number (NINO)</label>
-          <input type="text" id="f_nino" name="nino" class="form-control" value="${data.nino || ''}">
+          <input type="text" id="f_nino" name="nino" class="form-control" value="${escapeHTML(data.nino || '')}">
         </div>
       `;
     } else if (docType === 'p45') {
       html = `
         <div class="form-group">
           <label for="f_leavingDate">Leaving Date *</label>
-          <input type="date" id="f_leavingDate" name="leavingDate" class="form-control" value="${data.leavingDate || new Date().toISOString().split('T')[0]}" required>
+          <input type="date" id="f_leavingDate" name="leavingDate" class="form-control" value="${escapeHTML(data.leavingDate || new Date().toISOString().split('T')[0])}" required>
         </div>
         <div class="form-group">
           <label for="f_employerName">Employer Name</label>
-          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${data.employerName || ''}">
+          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${escapeHTML(data.employerName || '')}">
         </div>
         <div class="form-group">
           <label for="f_employeeName">Employee Name</label>
-          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${data.employeeName || ''}">
+          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${escapeHTML(data.employeeName || '')}">
         </div>
         <div class="form-group">
           <label for="f_totalPayToDate">Total Pay to Date (£) *</label>
@@ -600,11 +685,11 @@
         </div>
         <div class="form-group">
           <label for="f_taxCodeAtLeaving">Tax Code at Leaving</label>
-          <input type="text" id="f_taxCodeAtLeaving" name="taxCodeAtLeaving" class="form-control" value="${data.taxCodeAtLeaving || '1257L'}">
+          <input type="text" id="f_taxCodeAtLeaving" name="taxCodeAtLeaving" class="form-control" value="${escapeHTML(data.taxCodeAtLeaving || '1257L')}">
         </div>
         <div class="form-group">
           <label for="f_nino">NI Number (NINO)</label>
-          <input type="text" id="f_nino" name="nino" class="form-control" value="${data.nino || ''}">
+          <input type="text" id="f_nino" name="nino" class="form-control" value="${escapeHTML(data.nino || '')}">
         </div>
         <div class="form-group">
           <label for="f_studentLoanDeduction">Student Loan Deduction Continuing?</label>
@@ -619,15 +704,15 @@
       html = `
         <div class="form-group">
           <label for="f_taxYear">Tax Year *</label>
-          <input type="text" id="f_taxYear" name="taxYear" class="form-control" value="${data.taxYear || TaxDB.getTaxYear(new Date())}" placeholder="2025-2026" required>
+          <input type="text" id="f_taxYear" name="taxYear" class="form-control" value="${escapeHTML(data.taxYear || TaxDB.getTaxYear(new Date()))}" placeholder="2025-2026" required>
         </div>
         <div class="form-group">
           <label for="f_employerName">Employer Name</label>
-          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${data.employerName || ''}">
+          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${escapeHTML(data.employerName || '')}">
         </div>
         <div class="form-group">
           <label for="f_employeeName">Employee Name</label>
-          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${data.employeeName || ''}">
+          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${escapeHTML(data.employeeName || '')}">
         </div>
         <div class="form-group">
           <label for="f_totalBenefits">Total Value of Benefits (£) *</label>
@@ -676,7 +761,10 @@
       renderRecordsList();
     });
 
-    analyticsTaxYear.addEventListener('change', () => {
+    analyticsTaxYear.addEventListener('change', async () => {
+      if (typeof Chart === 'undefined') {
+        await loadScript('vendor/chart.min.js');
+      }
       TaxAnalytics.renderAnalytics(allStoredDocuments, analyticsTaxYear.value);
       if (isAnalyticsTableVisible) renderAnalyticsTable();
     });
@@ -694,7 +782,7 @@
     });
   }
 
-  /* Render Records List (Cards vs Table) */
+  /* Render Records List */
   function renderRecordsList() {
     const query = searchInput.value.toLowerCase().trim();
     const selectedYear = filterTaxYear.value;
@@ -743,18 +831,21 @@
     let html = '';
 
     Object.keys(grouped).sort().reverse().forEach(year => {
-      html += `<h3 style="margin-top: 1rem; color: var(--gov-blue-dark);">Tax Year ${year}</h3>`;
+      html += `<h3 style="margin-top: 1rem; color: var(--gov-blue-dark);">Tax Year ${escapeHTML(year)}</h3>`;
 
       grouped[year].forEach(doc => {
         let title = '';
         let amountText = '';
         let dateText = doc.payDate || doc.leavingDate || (doc.createdAt ? doc.createdAt.split('T')[0] : '');
 
+        const safeEmp = escapeHTML(doc.employerName || doc.employerDetails);
+        const safeCode = escapeHTML(doc.taxCode || doc.finalTaxCode || doc.taxCodeAtLeaving || '1257L');
+
         if (doc.docType === 'payslip') {
-          title = doc.employerName ? `Payslip - ${doc.employerName}` : 'Payslip';
+          title = safeEmp ? `Payslip - ${safeEmp}` : 'Payslip';
           amountText = `Net: ${TaxDB.formatCurrency(doc.netPay)} <br><small style="font-weight:normal; color:var(--text-muted)">Gross: ${TaxDB.formatCurrency(doc.grossPay)}</small>`;
         } else if (doc.docType === 'p60') {
-          title = doc.employerDetails || doc.employerName ? `P60 - ${doc.employerDetails || doc.employerName}` : 'P60 Certificate';
+          title = safeEmp ? `P60 - ${safeEmp}` : 'P60 Certificate';
           amountText = `Total Pay: ${TaxDB.formatCurrency(doc.totalPay)}`;
         } else if (doc.docType === 'p45') {
           title = 'P45 Leaving Certificate';
@@ -770,17 +861,17 @@
           <div class="record-item" data-id="${doc.id}">
             <div class="record-main">
               <div class="record-title">
-                <span class="badge badge-${doc.docType}">${doc.docType.toUpperCase()}</span>
+                <span class="badge badge-${escapeHTML(doc.docType)}">${escapeHTML(doc.docType.toUpperCase())}</span>
                 ${dupBadge}
                 <span>${title}</span>
               </div>
               <div class="record-meta">
-                Date: ${dateText} | Tax Code: ${doc.taxCode || doc.finalTaxCode || doc.taxCodeAtLeaving || '1257L'}
+                Date: ${escapeHTML(dateText)} | Tax Code: ${safeCode}
               </div>
             </div>
             <div class="record-amount">${amountText}</div>
             <div class="record-actions">
-              <button class="btn btn-outline btn-sm btn-view" data-id="${doc.id}">View / Edit</button>
+              <button class="btn btn-outline btn-sm btn-view" data-id="${doc.id}" aria-label="View or edit document">View / Edit</button>
             </div>
           </div>
         `;
@@ -819,12 +910,12 @@
 
       html += `
         <tr>
-          <td>${dupBadge}<span class="badge badge-${doc.docType}">${doc.docType.toUpperCase()}</span></td>
-          <td>${doc.payDate || doc.leavingDate || doc.taxYear}</td>
-          <td>${doc.employerName || doc.employerDetails || '-'}</td>
-          <td>${doc.employeeName || '-'} <br><small style="color:var(--text-muted)">${doc.nino || ''}</small></td>
+          <td>${dupBadge}<span class="badge badge-${escapeHTML(doc.docType)}">${escapeHTML(doc.docType.toUpperCase())}</span></td>
+          <td>${escapeHTML(doc.payDate || doc.leavingDate || doc.taxYear)}</td>
+          <td>${escapeHTML(doc.employerName || doc.employerDetails || '-')}</td>
+          <td>${escapeHTML(doc.employeeName || '-')} <br><small style="color:var(--text-muted)">${escapeHTML(doc.nino || '')}</small></td>
           <td><strong>${mainAmount}</strong></td>
-          <td><button class="btn btn-outline btn-sm btn-view" data-id="${doc.id}">Edit</button></td>
+          <td><button class="btn btn-outline btn-sm btn-view" data-id="${doc.id}" aria-label="Edit document">Edit</button></td>
         </tr>
       `;
     });
@@ -882,9 +973,9 @@
 
       html += `
         <tr>
-          <td><span class="badge badge-${d.docType}">${d.docType.toUpperCase()}</span></td>
-          <td>${d.employerName || d.employerDetails || '-'}</td>
-          <td>${d.payDate || d.leavingDate || d.taxYear}</td>
+          <td><span class="badge badge-${escapeHTML(d.docType)}">${escapeHTML(d.docType.toUpperCase())}</span></td>
+          <td>${escapeHTML(d.employerName || d.employerDetails || '-')}</td>
+          <td>${escapeHTML(d.payDate || d.leavingDate || d.taxYear)}</td>
           <td>${TaxDB.formatCurrency(gross)}</td>
           <td>${TaxDB.formatCurrency(tax)}</td>
           <td>${TaxDB.formatCurrency(ni)}</td>
@@ -921,7 +1012,6 @@
       }
     });
 
-    // Keyboard Arrow navigation
     window.addEventListener('keydown', e => {
       if (recallModal.classList.contains('hidden')) return;
       if (e.key === 'ArrowLeft') {
@@ -961,7 +1051,6 @@
 
     recallStepIndicator.textContent = `Payslip ${currentRecallIndex + 1} of ${recallPayslipsList.length}`;
 
-    // Enable/disable navigation buttons
     btnPrevPayslip.disabled = currentRecallIndex === 0;
     btnNextPayslip.disabled = currentRecallIndex === recallPayslipsList.length - 1;
 
@@ -974,34 +1063,42 @@
     const totalDeductions = tax + ni + pension + studentLoan + other;
     const net = Number(ps.netPay || (gross - totalDeductions));
 
+    const safeEmployer = escapeHTML(ps.employerName || 'EMPLOYER PAY ADVICE');
+    const safeEmployee = escapeHTML(ps.employeeName || 'Standard Employee');
+    const safeDate = escapeHTML(ps.payDate || 'Date N/A');
+    const safeTaxYear = escapeHTML(ps.taxYear || '2025-2026');
+    const safeTaxCode = escapeHTML(ps.taxCode || '1257L');
+    const safeNino = escapeHTML(ps.nino || 'N/A');
+    const safePeriod = escapeHTML(ps.taxWeekMonth || 'Month');
+
     payslipSheet.innerHTML = `
       <div class="ps-header">
         <div>
-          <div class="ps-employer-title">${ps.employerName || 'EMPLOYER PAY ADVICE'}</div>
-          <div style="font-size:0.85rem; color:var(--text-muted);">Employee: ${ps.employeeName || 'Standard Employee'}</div>
+          <div class="ps-employer-title">${safeEmployer}</div>
+          <div style="font-size:0.85rem; color:var(--text-muted);">Employee: ${safeEmployee}</div>
         </div>
         <div style="text-align:right;">
           <span class="ps-title-badge">OFFICIAL PAYSLIP</span>
-          <div style="font-size:0.85rem; font-weight:700; color:var(--gov-blue-dark); margin-top:0.2rem;">${ps.payDate || 'Date N/A'}</div>
+          <div style="font-size:0.85rem; font-weight:700; color:var(--gov-blue-dark); margin-top:0.2rem;">${safeDate}</div>
         </div>
       </div>
 
       <div class="ps-meta-grid">
         <div class="ps-meta-item">
           <label>Tax Year</label>
-          <span>${ps.taxYear || '2025-2026'}</span>
+          <span>${safeTaxYear}</span>
         </div>
         <div class="ps-meta-item">
           <label>Tax Code</label>
-          <span>${ps.taxCode || '1257L'}</span>
+          <span>${safeTaxCode}</span>
         </div>
         <div class="ps-meta-item">
           <label>NI Number</label>
-          <span>${ps.nino || 'N/A'}</span>
+          <span>${safeNino}</span>
         </div>
         <div class="ps-meta-item">
           <label>Tax Period</label>
-          <span>${ps.taxWeekMonth || 'Month'}</span>
+          <span>${safePeriod}</span>
         </div>
       </div>
 
@@ -1130,44 +1227,44 @@
     let html = '';
     if (doc.docType === 'payslip') {
       html = `
-        <div class="form-group"><label>Pay Date</label><input type="date" name="payDate" class="form-control" value="${doc.payDate || ''}"></div>
-        <div class="form-group"><label>Employer Name</label><input type="text" name="employerName" class="form-control" value="${doc.employerName || ''}"></div>
-        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${doc.employeeName || ''}"></div>
+        <div class="form-group"><label>Pay Date</label><input type="date" name="payDate" class="form-control" value="${escapeHTML(doc.payDate || '')}"></div>
+        <div class="form-group"><label>Employer Name</label><input type="text" name="employerName" class="form-control" value="${escapeHTML(doc.employerName || '')}"></div>
+        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${escapeHTML(doc.employeeName || '')}"></div>
         <div class="form-group"><label>Gross Pay (£)</label><input type="number" step="0.01" name="grossPay" class="form-control" value="${doc.grossPay || 0}"></div>
         <div class="form-group"><label>Net Pay (£)</label><input type="number" step="0.01" name="netPay" class="form-control" value="${doc.netPay || 0}"></div>
         <div class="form-group"><label>PAYE Tax (£)</label><input type="number" step="0.01" name="taxPaid" class="form-control" value="${doc.taxPaid || 0}"></div>
         <div class="form-group"><label>National Insurance (£)</label><input type="number" step="0.01" name="nationalInsurance" class="form-control" value="${doc.nationalInsurance || 0}"></div>
         <div class="form-group"><label>Pension (£)</label><input type="number" step="0.01" name="pension" class="form-control" value="${doc.pension || 0}"></div>
         <div class="form-group"><label>Student Loan (£)</label><input type="number" step="0.01" name="studentLoan" class="form-control" value="${doc.studentLoan || 0}"></div>
-        <div class="form-group"><label>Tax Code</label><input type="text" name="taxCode" class="form-control" value="${doc.taxCode || '1257L'}"></div>
-        <div class="form-group"><label>NINO</label><input type="text" name="nino" class="form-control" value="${doc.nino || ''}"></div>
+        <div class="form-group"><label>Tax Code</label><input type="text" name="taxCode" class="form-control" value="${escapeHTML(doc.taxCode || '1257L')}"></div>
+        <div class="form-group"><label>NINO</label><input type="text" name="nino" class="form-control" value="${escapeHTML(doc.nino || '')}"></div>
       `;
     } else if (doc.docType === 'p60') {
       html = `
-        <div class="form-group"><label>Tax Year</label><input type="text" name="taxYear" class="form-control" value="${doc.taxYear || ''}"></div>
-        <div class="form-group"><label>Employer Details</label><input type="text" name="employerName" class="form-control" value="${doc.employerName || doc.employerDetails || ''}"></div>
-        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${doc.employeeName || ''}"></div>
+        <div class="form-group"><label>Tax Year</label><input type="text" name="taxYear" class="form-control" value="${escapeHTML(doc.taxYear || '')}"></div>
+        <div class="form-group"><label>Employer Details</label><input type="text" name="employerName" class="form-control" value="${escapeHTML(doc.employerName || doc.employerDetails || '')}"></div>
+        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${escapeHTML(doc.employeeName || '')}"></div>
         <div class="form-group"><label>Total Pay (£)</label><input type="number" step="0.01" name="totalPay" class="form-control" value="${doc.totalPay || 0}"></div>
         <div class="form-group"><label>Total Tax (£)</label><input type="number" step="0.01" name="totalTax" class="form-control" value="${doc.totalTax || 0}"></div>
-        <div class="form-group"><label>Final Tax Code</label><input type="text" name="finalTaxCode" class="form-control" value="${doc.finalTaxCode || ''}"></div>
-        <div class="form-group"><label>NINO</label><input type="text" name="nino" class="form-control" value="${doc.nino || ''}"></div>
+        <div class="form-group"><label>Final Tax Code</label><input type="text" name="finalTaxCode" class="form-control" value="${escapeHTML(doc.finalTaxCode || '')}"></div>
+        <div class="form-group"><label>NINO</label><input type="text" name="nino" class="form-control" value="${escapeHTML(doc.nino || '')}"></div>
       `;
     } else if (doc.docType === 'p45') {
       html = `
-        <div class="form-group"><label>Leaving Date</label><input type="date" name="leavingDate" class="form-control" value="${doc.leavingDate || ''}"></div>
-        <div class="form-group"><label>Employer Name</label><input type="text" name="employerName" class="form-control" value="${doc.employerName || ''}"></div>
-        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${doc.employeeName || ''}"></div>
+        <div class="form-group"><label>Leaving Date</label><input type="date" name="leavingDate" class="form-control" value="${escapeHTML(doc.leavingDate || '')}"></div>
+        <div class="form-group"><label>Employer Name</label><input type="text" name="employerName" class="form-control" value="${escapeHTML(doc.employerName || '')}"></div>
+        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${escapeHTML(doc.employeeName || '')}"></div>
         <div class="form-group"><label>Total Pay to Date (£)</label><input type="number" step="0.01" name="totalPayToDate" class="form-control" value="${doc.totalPayToDate || 0}"></div>
         <div class="form-group"><label>Total Tax to Date (£)</label><input type="number" step="0.01" name="totalTaxToDate" class="form-control" value="${doc.totalTaxToDate || 0}"></div>
-        <div class="form-group"><label>Tax Code at Leaving</label><input type="text" name="taxCodeAtLeaving" class="form-control" value="${doc.taxCodeAtLeaving || ''}"></div>
-        <div class="form-group"><label>NINO</label><input type="text" name="nino" class="form-control" value="${doc.nino || ''}"></div>
+        <div class="form-group"><label>Tax Code at Leaving</label><input type="text" name="taxCodeAtLeaving" class="form-control" value="${escapeHTML(doc.taxCodeAtLeaving || '')}"></div>
+        <div class="form-group"><label>NINO</label><input type="text" name="nino" class="form-control" value="${escapeHTML(doc.nino || '')}"></div>
       `;
     } else if (doc.docType === 'p11d') {
       const itemized = doc.itemizedBenefits || {};
       html = `
-        <div class="form-group"><label>Tax Year</label><input type="text" name="taxYear" class="form-control" value="${doc.taxYear || ''}"></div>
-        <div class="form-group"><label>Employer Name</label><input type="text" name="employerName" class="form-control" value="${doc.employerName || ''}"></div>
-        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${doc.employeeName || ''}"></div>
+        <div class="form-group"><label>Tax Year</label><input type="text" name="taxYear" class="form-control" value="${escapeHTML(doc.taxYear || '')}"></div>
+        <div class="form-group"><label>Employer Name</label><input type="text" name="employerName" class="form-control" value="${escapeHTML(doc.employerName || '')}"></div>
+        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${escapeHTML(doc.employeeName || '')}"></div>
         <div class="form-group"><label>Total Benefits (£)</label><input type="number" step="0.01" name="totalBenefits" class="form-control" value="${doc.totalBenefits || 0}"></div>
         <div class="form-group"><label>Company Car (£)</label><input type="number" step="0.01" name="companyCar" class="form-control" value="${itemized.companyCar || 0}"></div>
         <div class="form-group"><label>Private Medical (£)</label><input type="number" step="0.01" name="privateMedical" class="form-control" value="${itemized.privateMedical || 0}"></div>

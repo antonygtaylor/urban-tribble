@@ -446,6 +446,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .inline-select {
@@ -697,6 +698,54 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* UK Wage & Inflation Benchmarking Insights Card */
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.insight-box {
+  background-color: var(--gov-grey-light);
+  border-left: 4px solid var(--gov-blue);
+  border-radius: var(--radius);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.insight-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--gov-blue-dark);
+  letter-spacing: 0.04em;
+}
+
+.insight-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin: 0.2rem 0;
+}
+
+.insight-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.stat-highlight-green {
+  color: var(--gov-green);
+  font-weight: 700;
+}
+
+.stat-highlight-orange {
+  color: var(--gov-orange);
+  font-weight: 700;
 }
 
 /* Summary Cards Grid */
