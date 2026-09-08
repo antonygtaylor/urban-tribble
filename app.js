@@ -10,12 +10,28 @@
   let currentScannedResult = null;
   let activeEditingDocId = null;
   let allStoredDocuments = [];
+  let recordsViewMode = 'cards'; // 'cards' or 'table'
+  let isAnalyticsTableVisible = false;
 
   // DOM Elements
   const navTabs = document.querySelectorAll('.nav-tab');
   const tabContents = document.querySelectorAll('.tab-content');
   const offlineBadge = document.getElementById('offlineBadge');
 
+  // Mismatch Alert Banner
+  const mismatchBanner = document.getElementById('mismatchBanner');
+  const mismatchMessage = document.getElementById('mismatchMessage');
+  const btnDismissMismatch = document.getElementById('btnDismissMismatch');
+
+  // Overview Tab
+  const ovTotalDocs = document.getElementById('ovTotalDocs');
+  const ovTotalEmployers = document.getElementById('ovTotalEmployers');
+  const ovTotalNet = document.getElementById('ovTotalNet');
+  const ovTotalTax = document.getElementById('ovTotalTax');
+  const btnOverviewScan = document.getElementById('btnOverviewScan');
+  const overviewEmployersList = document.getElementById('overviewEmployersList');
+
+  // Scan & Form
   const cameraInput = document.getElementById('cameraInput');
   const fileInput = document.getElementById('fileInput');
   const btnManualAdd = document.getElementById('btnManualAdd');
@@ -34,13 +50,22 @@
   const reviewForm = document.getElementById('reviewForm');
   const btnCancelReview = document.getElementById('btnCancelReview');
 
+  // Records / History
   const searchInput = document.getElementById('searchInput');
   const filterTaxYear = document.getElementById('filterTaxYear');
+  const filterEmployer = document.getElementById('filterEmployer');
   const filterDocType = document.getElementById('filterDocType');
   const recordsList = document.getElementById('recordsList');
+  const btnViewCards = document.getElementById('btnViewCards');
+  const btnViewTable = document.getElementById('btnViewTable');
 
+  // Analytics
   const analyticsTaxYear = document.getElementById('analyticsTaxYear');
+  const btnToggleAnalyticsTable = document.getElementById('btnToggleAnalyticsTable');
+  const analyticsTableContainer = document.getElementById('analyticsTableContainer');
+  const analyticsTableContent = document.getElementById('analyticsTableContent');
 
+  // Modal & Toast
   const detailModal = document.getElementById('detailModal');
   const modalTitle = document.getElementById('modalTitle');
   const modalBody = document.getElementById('modalBody');
@@ -48,7 +73,6 @@
   const btnModalSave = document.getElementById('btnModalSave');
   const btnModalDelete = document.getElementById('btnModalDelete');
   const btnModalCancel = document.getElementById('btnModalCancel');
-
   const toast = document.getElementById('toast');
 
   // Initialization
@@ -59,10 +83,12 @@
   async function initApp() {
     setupOfflineListener();
     setupNavigation();
+    setupOverviewControls();
     setupImageHandlers();
     setupReviewForm();
-    setupFilters();
+    setupFiltersAndViewToggles();
     setupModal();
+    setupMismatchBanner();
     registerServiceWorker();
 
     await loadDocumentsAndRender();
@@ -91,35 +117,57 @@
     }, duration);
   }
 
-  /* Tab Navigation */
+  /* Navigation Tabs */
   function setupNavigation() {
     navTabs.forEach(tab => {
       tab.addEventListener('click', () => {
         const targetTab = tab.getAttribute('data-tab');
-
-        navTabs.forEach(t => t.classList.remove('active'));
-        tabContents.forEach(c => c.classList.remove('active'));
-
-        tab.classList.add('active');
-        document.getElementById(targetTab).classList.add('active');
-
-        if (targetTab === 'analyticsTab') {
-          TaxAnalytics.renderAnalytics(allStoredDocuments, analyticsTaxYear.value);
-        } else if (targetTab === 'historyTab') {
-          renderRecordsList();
-        }
+        switchTab(targetTab);
       });
     });
   }
 
-  /* Load Documents & Update Tax Year Filters */
+  function switchTab(targetTabId) {
+    navTabs.forEach(t => t.classList.remove('active'));
+    tabContents.forEach(c => c.classList.remove('active'));
+
+    const activeTabBtn = document.querySelector(`.nav-tab[data-tab="${targetTabId}"]`);
+    if (activeTabBtn) activeTabBtn.classList.add('active');
+
+    const activeContent = document.getElementById(targetTabId);
+    if (activeContent) activeContent.classList.add('active');
+
+    if (targetTabId === 'overviewTab') {
+      renderOverviewTab();
+    } else if (targetTabId === 'analyticsTab') {
+      TaxAnalytics.renderAnalytics(allStoredDocuments, analyticsTaxYear.value);
+      if (isAnalyticsTableVisible) renderAnalyticsTable();
+    } else if (targetTabId === 'historyTab') {
+      renderRecordsList();
+    }
+  }
+
+  /* Overview Controls */
+  function setupOverviewControls() {
+    if (btnOverviewScan) {
+      btnOverviewScan.addEventListener('click', () => {
+        switchTab('scanTab');
+      });
+    }
+  }
+
+  /* Load Documents & Check Mismatches */
   async function loadDocumentsAndRender() {
     try {
       allStoredDocuments = await TaxDB.getAllDocuments();
-      populateTaxYearDropdowns();
+      populateDropdownFilters();
+      renderOverviewTab();
       renderRecordsList();
+      checkAndShowEmployeeMismatches();
+
       if (document.getElementById('analyticsTab').classList.contains('active')) {
         TaxAnalytics.renderAnalytics(allStoredDocuments, analyticsTaxYear.value);
+        if (isAnalyticsTableVisible) renderAnalyticsTable();
       }
     } catch (err) {
       console.error('Error loading documents:', err);
@@ -127,18 +175,150 @@
     }
   }
 
-  function populateTaxYearDropdowns() {
+  /* Employee Mismatch Detection Banner (Show once per unique mismatch) */
+  function setupMismatchBanner() {
+    btnDismissMismatch.addEventListener('click', () => {
+      mismatchBanner.classList.add('hidden');
+    });
+  }
+
+  function checkAndShowEmployeeMismatches() {
+    if (allStoredDocuments.length < 2) {
+      mismatchBanner.classList.add('hidden');
+      return;
+    }
+
+    const employeeNames = new Set();
+    const ninos = new Set();
+
+    allStoredDocuments.forEach(doc => {
+      if (doc.employeeName && doc.employeeName.trim()) {
+        employeeNames.add(doc.employeeName.trim());
+      }
+      if (doc.nino && doc.nino.trim()) {
+        ninos.add(doc.nino.trim().toUpperCase());
+      }
+    });
+
+    let mismatchFound = false;
+    let mismatchText = '';
+    let mismatchKey = '';
+
+    if (employeeNames.size > 1) {
+      const namesList = Array.from(employeeNames).join(' vs ');
+      mismatchKey = `mismatch_names_${namesList}`;
+      mismatchText = `Multiple employee names detected across documents: (${namesList}).`;
+      mismatchFound = true;
+    } else if (ninos.size > 1) {
+      const ninoList = Array.from(ninos).join(' vs ');
+      mismatchKey = `mismatch_nino_${ninoList}`;
+      mismatchText = `Multiple National Insurance numbers detected across documents: (${ninoList}).`;
+      mismatchFound = true;
+    }
+
+    if (mismatchFound) {
+      // Check localStorage to show once per unique mismatch
+      const shownMismatches = JSON.parse(localStorage.getItem('shown_mismatches') || '[]');
+      if (!shownMismatches.includes(mismatchKey)) {
+        mismatchMessage.textContent = mismatchText;
+        mismatchBanner.classList.remove('hidden');
+
+        // Record signature into localStorage
+        shownMismatches.push(mismatchKey);
+        localStorage.setItem('shown_mismatches', JSON.stringify(shownMismatches));
+      }
+    } else {
+      mismatchBanner.classList.add('hidden');
+    }
+  }
+
+  /* Overview Dashboard Renderer */
+  function renderOverviewTab() {
+    ovTotalDocs.textContent = allStoredDocuments.length;
+
+    const employersSet = new Set();
+    let totalNet = 0;
+    let totalTax = 0;
+
+    const employerGroups = {};
+
+    allStoredDocuments.forEach(doc => {
+      const empName = doc.employerName || doc.employerDetails || 'Unknown Employer';
+      employersSet.add(empName);
+
+      if (!employerGroups[empName]) {
+        employerGroups[empName] = { count: 0, net: 0, docs: [] };
+      }
+      employerGroups[empName].count++;
+      employerGroups[empName].docs.push(doc);
+
+      if (doc.docType === 'payslip') {
+        totalNet += Number(doc.netPay || 0);
+        totalTax += Number(doc.taxPaid || 0);
+      } else if (doc.docType === 'p60') {
+        totalTax += Number(doc.totalTax || 0);
+      }
+    });
+
+    ovTotalEmployers.textContent = employersSet.size;
+    ovTotalNet.textContent = TaxDB.formatCurrency(totalNet);
+    ovTotalTax.textContent = TaxDB.formatCurrency(totalTax);
+
+    // Render Employer Group Cards
+    if (Object.keys(employerGroups).length === 0) {
+      overviewEmployersList.innerHTML = `
+        <div class="empty-state">
+          <p>No documents uploaded yet. Click "+ Add New Document" above to get started.</p>
+        </div>
+      `;
+      return;
+    }
+
+    let empHtml = '';
+    Object.keys(employerGroups).forEach(emp => {
+      const group = employerGroups[emp];
+      empHtml += `
+        <div class="employer-card">
+          <div>
+            <div class="employer-name">${emp}</div>
+            <div class="employer-stats">${group.count} document(s) uploaded</div>
+          </div>
+          <button class="btn btn-outline btn-sm btn-filter-employer" data-employer="${emp}">
+            View Records
+          </button>
+        </div>
+      `;
+    });
+
+    overviewEmployersList.innerHTML = empHtml;
+
+    // Attach click listeners to filter records by employer
+    overviewEmployersList.querySelectorAll('.btn-filter-employer').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const emp = e.target.getAttribute('data-employer');
+        filterEmployer.value = emp;
+        switchTab('historyTab');
+      });
+    });
+  }
+
+  /* Populate Dropdowns (Tax Year & Employer) */
+  function populateDropdownFilters() {
     const yearsSet = new Set();
-    // Default current tax year
+    const employersSet = new Set();
+
     yearsSet.add(TaxDB.getTaxYear(new Date()));
 
     allStoredDocuments.forEach(doc => {
       if (doc.taxYear) yearsSet.add(doc.taxYear);
+      const emp = doc.employerName || doc.employerDetails;
+      if (emp) employersSet.add(emp);
     });
 
     const sortedYears = Array.from(yearsSet).sort().reverse();
+    const sortedEmployers = Array.from(employersSet).sort();
 
-    // Populate filterTaxYear & analyticsTaxYear
+    // Tax Year dropdowns
     [filterTaxYear, analyticsTaxYear].forEach(select => {
       const currentVal = select.value || 'all';
       select.innerHTML = '<option value="all">All Tax Years</option>';
@@ -150,6 +330,17 @@
       });
       select.value = currentVal;
     });
+
+    // Employer dropdown
+    const currentEmpVal = filterEmployer.value || 'all';
+    filterEmployer.innerHTML = '<option value="all">All Employers</option>';
+    sortedEmployers.forEach(emp => {
+      const opt = document.createElement('option');
+      opt.value = emp;
+      opt.textContent = emp;
+      filterEmployer.appendChild(opt);
+    });
+    filterEmployer.value = currentEmpVal;
   }
 
   /* Image Input & OCR Handling */
@@ -171,12 +362,10 @@
   async function handleImageFile(file) {
     if (!file) return;
 
-    // Show image preview
     const imageUrl = URL.createObjectURL(file);
     imagePreview.src = imageUrl;
     imagePreviewContainer.classList.remove('hidden');
 
-    // Show OCR status
     ocrStatus.classList.remove('hidden');
     ocrStatusText.textContent = 'Initializing OCR engine...';
     ocrProgressBar.style.width = '10%';
@@ -204,7 +393,6 @@
       ocrStatus.classList.add('hidden');
       showToast('OCR failed. You can still enter details manually.');
 
-      // Fallback manual form
       docTypeSelect.value = 'payslip';
       renderReviewFormFields('payslip', {});
       reviewCard.classList.remove('hidden');
@@ -231,12 +419,9 @@
       const formData = new FormData(reviewForm);
       const docType = docTypeSelect.value;
 
-      const record = {
-        docType: docType
-      };
+      const record = { docType: docType };
 
       formData.forEach((value, key) => {
-        // Convert monetary or numeric fields to numbers
         if (['grossPay', 'netPay', 'taxPaid', 'nationalInsurance', 'pension', 'studentLoan', 'otherDeductions', 'totalPay', 'totalTax', 'totalPayToDate', 'totalTaxToDate', 'totalBenefits', 'companyCar', 'privateMedical', 'relocation', 'fuelAllowance'].includes(key)) {
           record[key] = parseFloat(value) || 0;
         } else if (key === 'studentLoanDeduction') {
@@ -246,7 +431,6 @@
         }
       });
 
-      // Special itemized benefits structure for P11D
       if (docType === 'p11d') {
         record.itemizedBenefits = {
           companyCar: record.companyCar || 0,
@@ -256,7 +440,6 @@
         };
       }
 
-      // Calculate tax year
       const targetDate = record.payDate || record.leavingDate || new Date();
       record.taxYear = record.taxYear || TaxDB.getTaxYear(targetDate);
 
@@ -277,9 +460,6 @@
     });
   }
 
-  /**
-   * Render dynamic form fields based on Document Type
-   */
   function renderReviewFormFields(docType, data = {}) {
     docTypeBadge.textContent = docType.toUpperCase();
     docTypeBadge.className = `badge badge-${docType}`;
@@ -348,6 +528,14 @@
           <input type="text" id="f_taxYear" name="taxYear" class="form-control" value="${data.taxYear || TaxDB.getTaxYear(new Date())}" placeholder="2025-2026" required>
         </div>
         <div class="form-group">
+          <label for="f_employerName">Employer Details</label>
+          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${data.employerName || data.employerDetails || ''}">
+        </div>
+        <div class="form-group">
+          <label for="f_employeeName">Employee Name</label>
+          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${data.employeeName || ''}">
+        </div>
+        <div class="form-group">
           <label for="f_totalPay">Total Pay in Year (£) *</label>
           <input type="number" step="0.01" id="f_totalPay" name="totalPay" class="form-control" value="${data.totalPay || 0}" required>
         </div>
@@ -363,16 +551,20 @@
           <label for="f_nino">NI Number (NINO)</label>
           <input type="text" id="f_nino" name="nino" class="form-control" value="${data.nino || ''}">
         </div>
-        <div class="form-group">
-          <label for="f_employerDetails">Employer Details</label>
-          <input type="text" id="f_employerDetails" name="employerDetails" class="form-control" value="${data.employerDetails || ''}">
-        </div>
       `;
     } else if (docType === 'p45') {
       html = `
         <div class="form-group">
           <label for="f_leavingDate">Leaving Date *</label>
           <input type="date" id="f_leavingDate" name="leavingDate" class="form-control" value="${data.leavingDate || new Date().toISOString().split('T')[0]}" required>
+        </div>
+        <div class="form-group">
+          <label for="f_employerName">Employer Name</label>
+          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${data.employerName || ''}">
+        </div>
+        <div class="form-group">
+          <label for="f_employeeName">Employee Name</label>
+          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${data.employeeName || ''}">
         </div>
         <div class="form-group">
           <label for="f_totalPayToDate">Total Pay to Date (£) *</label>
@@ -406,6 +598,14 @@
           <input type="text" id="f_taxYear" name="taxYear" class="form-control" value="${data.taxYear || TaxDB.getTaxYear(new Date())}" placeholder="2025-2026" required>
         </div>
         <div class="form-group">
+          <label for="f_employerName">Employer Name</label>
+          <input type="text" id="f_employerName" name="employerName" class="form-control" value="${data.employerName || ''}">
+        </div>
+        <div class="form-group">
+          <label for="f_employeeName">Employee Name</label>
+          <input type="text" id="f_employeeName" name="employeeName" class="form-control" value="${data.employeeName || ''}">
+        </div>
+        <div class="form-group">
           <label for="f_totalBenefits">Total Value of Benefits (£) *</label>
           <input type="number" step="0.01" id="f_totalBenefits" name="totalBenefits" class="form-control" value="${data.totalBenefits || 0}" required>
         </div>
@@ -431,24 +631,58 @@
     dynamicFields.innerHTML = html;
   }
 
-  /* History Filters & Record Renderer */
-  function setupFilters() {
+  /* Filters & View Toggles */
+  function setupFiltersAndViewToggles() {
     searchInput.addEventListener('input', renderRecordsList);
     filterTaxYear.addEventListener('change', renderRecordsList);
+    filterEmployer.addEventListener('change', renderRecordsList);
     filterDocType.addEventListener('change', renderRecordsList);
+
+    btnViewCards.addEventListener('click', () => {
+      recordsViewMode = 'cards';
+      btnViewCards.classList.add('active');
+      btnViewTable.classList.remove('active');
+      renderRecordsList();
+    });
+
+    btnViewTable.addEventListener('click', () => {
+      recordsViewMode = 'table';
+      btnViewTable.classList.add('active');
+      btnViewCards.classList.remove('active');
+      renderRecordsList();
+    });
 
     analyticsTaxYear.addEventListener('change', () => {
       TaxAnalytics.renderAnalytics(allStoredDocuments, analyticsTaxYear.value);
+      if (isAnalyticsTableVisible) renderAnalyticsTable();
+    });
+
+    btnToggleAnalyticsTable.addEventListener('click', () => {
+      isAnalyticsTableVisible = !isAnalyticsTableVisible;
+      if (isAnalyticsTableVisible) {
+        btnToggleAnalyticsTable.textContent = 'Hide Data Table';
+        analyticsTableContainer.classList.remove('hidden');
+        renderAnalyticsTable();
+      } else {
+        btnToggleAnalyticsTable.textContent = 'Show Data Table';
+        analyticsTableContainer.classList.add('hidden');
+      }
     });
   }
 
+  /* Render Records List (Cards vs Table) */
   function renderRecordsList() {
     const query = searchInput.value.toLowerCase().trim();
     const selectedYear = filterTaxYear.value;
+    const selectedEmp = filterEmployer.value;
     const selectedType = filterDocType.value;
 
     let filtered = allStoredDocuments.filter(doc => {
       if (selectedYear !== 'all' && doc.taxYear !== selectedYear) return false;
+      if (selectedEmp !== 'all') {
+        const emp = doc.employerName || doc.employerDetails || '';
+        if (emp !== selectedEmp) return false;
+      }
       if (selectedType !== 'all' && doc.docType !== selectedType) return false;
 
       if (query) {
@@ -467,7 +701,14 @@
       return;
     }
 
-    // Group documents by Tax Year
+    if (recordsViewMode === 'table') {
+      renderRecordsTable(filtered);
+    } else {
+      renderRecordsCards(filtered);
+    }
+  }
+
+  function renderRecordsCards(filtered) {
     const grouped = {};
     filtered.forEach(doc => {
       const year = doc.taxYear || 'Other';
@@ -489,7 +730,7 @@
           title = doc.employerName ? `Payslip - ${doc.employerName}` : 'Payslip';
           amountText = `Net: ${TaxDB.formatCurrency(doc.netPay)} <br><small style="font-weight:normal; color:var(--text-muted)">Gross: ${TaxDB.formatCurrency(doc.grossPay)}</small>`;
         } else if (doc.docType === 'p60') {
-          title = doc.employerDetails ? `P60 - ${doc.employerDetails}` : 'P60 Certificate';
+          title = doc.employerDetails || doc.employerName ? `P60 - ${doc.employerDetails || doc.employerName}` : 'P60 Certificate';
           amountText = `Total Pay: ${TaxDB.formatCurrency(doc.totalPay)}`;
         } else if (doc.docType === 'p45') {
           title = 'P45 Leaving Certificate';
@@ -520,14 +761,115 @@
     });
 
     recordsList.innerHTML = html;
+    attachRecordActionListeners();
+  }
 
-    // Attach click listeners to View / Edit buttons
+  function renderRecordsTable(filtered) {
+    let html = `
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Date / Tax Year</th>
+              <th>Employer</th>
+              <th>Employee / NINO</th>
+              <th>Key Amount</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    filtered.forEach(doc => {
+      let mainAmount = '';
+      if (doc.docType === 'payslip') mainAmount = `Net: ${TaxDB.formatCurrency(doc.netPay)}`;
+      else if (doc.docType === 'p60') mainAmount = `Pay: ${TaxDB.formatCurrency(doc.totalPay)}`;
+      else if (doc.docType === 'p45') mainAmount = `Pay to Date: ${TaxDB.formatCurrency(doc.totalPayToDate)}`;
+      else if (doc.docType === 'p11d') mainAmount = `Benefits: ${TaxDB.formatCurrency(doc.totalBenefits)}`;
+
+      html += `
+        <tr>
+          <td><span class="badge badge-${doc.docType}">${doc.docType.toUpperCase()}</span></td>
+          <td>${doc.payDate || doc.leavingDate || doc.taxYear}</td>
+          <td>${doc.employerName || doc.employerDetails || '-'}</td>
+          <td>${doc.employeeName || '-'} <br><small style="color:var(--text-muted)">${doc.nino || ''}</small></td>
+          <td><strong>${mainAmount}</strong></td>
+          <td><button class="btn btn-outline btn-sm btn-view" data-id="${doc.id}">Edit</button></td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    recordsList.innerHTML = html;
+    attachRecordActionListeners();
+  }
+
+  function attachRecordActionListeners() {
     recordsList.querySelectorAll('.btn-view').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const id = e.target.getAttribute('data-id');
         openDetailModal(id);
       });
     });
+  }
+
+  /* Render Analytics Data Table */
+  function renderAnalyticsTable() {
+    const year = analyticsTaxYear.value;
+    const filteredDocs = TaxAnalytics.filterDocsByTaxYear(allStoredDocuments, year);
+
+    if (filteredDocs.length === 0) {
+      analyticsTableContent.innerHTML = '<p class="subtitle">No records available for this tax year.</p>';
+      return;
+    }
+
+    let html = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Employer</th>
+            <th>Tax Year / Date</th>
+            <th>Gross / Total Pay</th>
+            <th>Tax Paid</th>
+            <th>NI</th>
+            <th>Net Pay</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    filteredDocs.forEach(d => {
+      const gross = d.grossPay || d.totalPay || d.totalPayToDate || 0;
+      const tax = d.taxPaid || d.totalTax || d.totalTaxToDate || 0;
+      const ni = d.nationalInsurance || 0;
+      const net = d.netPay || (gross - tax - ni);
+
+      html += `
+        <tr>
+          <td><span class="badge badge-${d.docType}">${d.docType.toUpperCase()}</span></td>
+          <td>${d.employerName || d.employerDetails || '-'}</td>
+          <td>${d.payDate || d.leavingDate || d.taxYear}</td>
+          <td>${TaxDB.formatCurrency(gross)}</td>
+          <td>${TaxDB.formatCurrency(tax)}</td>
+          <td>${TaxDB.formatCurrency(ni)}</td>
+          <td><strong>${TaxDB.formatCurrency(net)}</strong></td>
+        </tr>
+      `;
+    });
+
+    html += `
+        </tbody>
+      </table>
+    `;
+
+    analyticsTableContent.innerHTML = html;
   }
 
   /* Detail / Edit Modal */
@@ -598,28 +940,22 @@
     activeEditingDocId = id;
     modalTitle.textContent = `Edit ${doc.docType.toUpperCase()} Record`;
 
-    // Render modal edit form
-    const tempContainer = document.createElement('div');
+    modalBody.innerHTML = '';
     const form = document.createElement('form');
     form.id = 'modalEditForm';
 
     const fieldsGrid = document.createElement('div');
     fieldsGrid.className = 'form-grid';
 
-    // We can reuse the render logic
-    const oldDynamicFields = dynamicFields;
-
-    // Temporary override
-    modalBody.innerHTML = '';
     modalBody.appendChild(form);
     form.appendChild(fieldsGrid);
 
-    // Call inner field generator
     let html = '';
     if (doc.docType === 'payslip') {
       html = `
         <div class="form-group"><label>Pay Date</label><input type="date" name="payDate" class="form-control" value="${doc.payDate || ''}"></div>
         <div class="form-group"><label>Employer Name</label><input type="text" name="employerName" class="form-control" value="${doc.employerName || ''}"></div>
+        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${doc.employeeName || ''}"></div>
         <div class="form-group"><label>Gross Pay (£)</label><input type="number" step="0.01" name="grossPay" class="form-control" value="${doc.grossPay || 0}"></div>
         <div class="form-group"><label>Net Pay (£)</label><input type="number" step="0.01" name="netPay" class="form-control" value="${doc.netPay || 0}"></div>
         <div class="form-group"><label>PAYE Tax (£)</label><input type="number" step="0.01" name="taxPaid" class="form-control" value="${doc.taxPaid || 0}"></div>
@@ -632,22 +968,29 @@
     } else if (doc.docType === 'p60') {
       html = `
         <div class="form-group"><label>Tax Year</label><input type="text" name="taxYear" class="form-control" value="${doc.taxYear || ''}"></div>
+        <div class="form-group"><label>Employer Details</label><input type="text" name="employerName" class="form-control" value="${doc.employerName || doc.employerDetails || ''}"></div>
+        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${doc.employeeName || ''}"></div>
         <div class="form-group"><label>Total Pay (£)</label><input type="number" step="0.01" name="totalPay" class="form-control" value="${doc.totalPay || 0}"></div>
         <div class="form-group"><label>Total Tax (£)</label><input type="number" step="0.01" name="totalTax" class="form-control" value="${doc.totalTax || 0}"></div>
         <div class="form-group"><label>Final Tax Code</label><input type="text" name="finalTaxCode" class="form-control" value="${doc.finalTaxCode || ''}"></div>
-        <div class="form-group"><label>Employer Details</label><input type="text" name="employerDetails" class="form-control" value="${doc.employerDetails || ''}"></div>
+        <div class="form-group"><label>NINO</label><input type="text" name="nino" class="form-control" value="${doc.nino || ''}"></div>
       `;
     } else if (doc.docType === 'p45') {
       html = `
         <div class="form-group"><label>Leaving Date</label><input type="date" name="leavingDate" class="form-control" value="${doc.leavingDate || ''}"></div>
+        <div class="form-group"><label>Employer Name</label><input type="text" name="employerName" class="form-control" value="${doc.employerName || ''}"></div>
+        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${doc.employeeName || ''}"></div>
         <div class="form-group"><label>Total Pay to Date (£)</label><input type="number" step="0.01" name="totalPayToDate" class="form-control" value="${doc.totalPayToDate || 0}"></div>
         <div class="form-group"><label>Total Tax to Date (£)</label><input type="number" step="0.01" name="totalTaxToDate" class="form-control" value="${doc.totalTaxToDate || 0}"></div>
         <div class="form-group"><label>Tax Code at Leaving</label><input type="text" name="taxCodeAtLeaving" class="form-control" value="${doc.taxCodeAtLeaving || ''}"></div>
+        <div class="form-group"><label>NINO</label><input type="text" name="nino" class="form-control" value="${doc.nino || ''}"></div>
       `;
     } else if (doc.docType === 'p11d') {
       const itemized = doc.itemizedBenefits || {};
       html = `
         <div class="form-group"><label>Tax Year</label><input type="text" name="taxYear" class="form-control" value="${doc.taxYear || ''}"></div>
+        <div class="form-group"><label>Employer Name</label><input type="text" name="employerName" class="form-control" value="${doc.employerName || ''}"></div>
+        <div class="form-group"><label>Employee Name</label><input type="text" name="employeeName" class="form-control" value="${doc.employeeName || ''}"></div>
         <div class="form-group"><label>Total Benefits (£)</label><input type="number" step="0.01" name="totalBenefits" class="form-control" value="${doc.totalBenefits || 0}"></div>
         <div class="form-group"><label>Company Car (£)</label><input type="number" step="0.01" name="companyCar" class="form-control" value="${itemized.companyCar || 0}"></div>
         <div class="form-group"><label>Private Medical (£)</label><input type="number" step="0.01" name="privateMedical" class="form-control" value="${itemized.privateMedical || 0}"></div>

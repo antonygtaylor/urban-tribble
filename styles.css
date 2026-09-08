@@ -75,6 +75,48 @@ body {
   text-transform: uppercase;
 }
 
+/* Alert Banner */
+.alert-banner {
+  max-width: 900px;
+  margin: 0.75rem auto 0 auto;
+  padding: 0.85rem 1.25rem;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.warning-banner {
+  background-color: #fff7ed;
+  border: 1px solid #f97316;
+  color: #9a3412;
+}
+
+.alert-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.alert-icon {
+  flex-shrink: 0;
+  color: #f97316;
+}
+
+.alert-text {
+  font-size: 0.875rem;
+}
+
+.btn-dismiss {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #9a3412;
+  cursor: pointer;
+}
+
 /* Navigation Tabs */
 .nav-tabs {
   display: flex;
@@ -207,6 +249,11 @@ body {
   color: #ffffff;
 }
 
+.btn-sm {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+}
+
 .btn-block {
   width: 100%;
 }
@@ -223,6 +270,32 @@ body {
   line-height: 1;
   color: var(--text-muted);
   cursor: pointer;
+}
+
+/* View Mode Toggles */
+.view-toggle-group {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.btn-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background-color: #ffffff;
+  color: var(--text-muted);
+  border: none;
+  cursor: pointer;
+}
+
+.btn-toggle.active {
+  background-color: var(--gov-blue);
+  color: #ffffff;
 }
 
 .hidden-input {
@@ -364,6 +437,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.header-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .inline-select {
@@ -381,7 +462,7 @@ body {
 
 .filter-item {
   flex: 1;
-  min-width: 160px;
+  min-width: 150px;
 }
 
 /* Records List */
@@ -438,10 +519,63 @@ body {
   gap: 0.5rem;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 2.5rem 1rem;
+/* Tables */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table th, .data-table td {
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.data-table th {
+  background-color: var(--gov-grey-light);
+  font-weight: 700;
+  color: var(--gov-blue-dark);
+}
+
+.data-table tr:hover {
+  background-color: rgba(0, 94, 165, 0.03);
+}
+
+/* Employers Grid */
+.employers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.employer-card {
+  background-color: var(--gov-grey-light);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.employer-name {
+  font-weight: 700;
+  color: var(--gov-blue-dark);
+  font-size: 1rem;
+}
+
+.employer-stats {
+  font-size: 0.85rem;
   color: var(--text-muted);
+  margin: 0.5rem 0;
 }
 
 /* Summary Cards Grid */

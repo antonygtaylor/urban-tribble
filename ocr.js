@@ -85,7 +85,7 @@
       return scores[0].type;
     }
 
-    return 'payslip'; // Default fallback
+    return 'payslip';
   }
 
   /**
@@ -170,12 +170,10 @@
 
   /**
    * Extract UK National Insurance Number (NINO)
-   * e.g. QQ123456A or QQ 12 34 56 A
    */
   function extractNINO(text) {
     if (!text) return '';
 
-    // Check lines with NI / NINO explicit label first
     const lines = text.split('\n');
     for (const line of lines) {
       if (/(?:ni|nino|national insurance)/i.test(line)) {
@@ -196,13 +194,11 @@
 
   /**
    * Extract UK Tax Code
-   * e.g. 1257L, BR, D0, D1, NT, K100, 1257L W1/M1, S1257L
    */
   function extractTaxCode(text) {
     if (!text) return '1257L';
 
     const lines = text.split('\n');
-    // Look specifically for lines containing 'Tax Code' or 'Code'
     for (const line of lines) {
       if (/(?:tax code|code)/i.test(line)) {
         const match = line.match(/(?:tax code|code)[\s:]*([S|C]?(?:K\d{1,4}|\d{1,4}[LMNTYK]|BR|D0|D1|NT|0T)(?:\s*(?:W1|M1|X))?)/i);
@@ -222,7 +218,7 @@
   }
 
   /**
-   * Extract Tax Year from text (e.g. 2025-2026, 2025/26, 2025-26)
+   * Extract Tax Year
    */
   function extractTaxYear(text) {
     if (!text) return null;
@@ -235,6 +231,24 @@
       return `${start}-${end}`;
     }
     return null;
+  }
+
+  function extractEmployerName(text) {
+    if (!text) return '';
+    const empMatch = text.match(/(?:employer|company|organisation|employer details|employer name)[\s:]+([A-Za-z0-9\s&.,'-]+)/i);
+    if (empMatch) {
+      return empMatch[1].trim().split('\n')[0];
+    }
+    return '';
+  }
+
+  function extractEmployeeName(text) {
+    if (!text) return '';
+    const eeMatch = text.match(/(?:employee|employee name|name)[\s:]+([A-Za-z\s.'-]+)/i);
+    if (eeMatch) {
+      return eeMatch[1].trim().split('\n')[0];
+    }
+    return '';
   }
 
   /**
@@ -251,32 +265,14 @@
 
     const payDate = extractDate(text, [/pay date/i, /date/i, /process date/i, /payment date/i]) || new Date().toISOString().split('T')[0];
 
-    // Tax Week or Month
     let taxWeekMonth = '';
     const twMatch = text.match(/tax\s*(week|month|period)[\s:]*(\d{1,2})/i);
     if (twMatch) {
       taxWeekMonth = `${twMatch[1].toLowerCase()} ${twMatch[2]}`;
     }
 
-    // Employer Name & Employee Name
-    let employerName = '';
-    const empMatch = text.match(/(?:employer|company|organisation)[\s:]+([A-Za-z0-9\s&.,'-]+)/i);
-    if (empMatch) {
-      employerName = empMatch[1].trim().split('\n')[0];
-    } else {
-      // Fallback: search for top non-keyword line
-      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length > 0 && !/payslip|employee|pay date|gross|net|tax/i.test(lines[0])) {
-        employerName = lines[0].replace(/[-_]/g, ' ').trim();
-      }
-    }
-
-    let employeeName = '';
-    const eeMatch = text.match(/(?:employee|name|employee name)[\s:]+([A-Za-z\s.'-]+)/i);
-    if (eeMatch) {
-      employeeName = eeMatch[1].trim().split('\n')[0];
-    }
-
+    const employerName = extractEmployerName(text);
+    const employeeName = extractEmployeeName(text);
     const nino = extractNINO(text);
     const taxCode = extractTaxCode(text);
 
@@ -308,12 +304,8 @@
     const totalTax = extractAmount(text, [/total tax in this year/i, /total income tax/i, /tax paid in year/i, /total tax/i]) || 0;
     const finalTaxCode = extractTaxCode(text);
     const nino = extractNINO(text);
-
-    let employerDetails = '';
-    const empMatch = text.match(/(?:employer|employer details|employer name)[\s:]+([A-Za-z0-9\s&.,'-]+)/i);
-    if (empMatch) {
-      employerDetails = empMatch[1].trim().split('\n')[0];
-    }
+    const employerName = extractEmployerName(text);
+    const employeeName = extractEmployeeName(text);
 
     return {
       docType: 'p60',
@@ -322,7 +314,9 @@
       totalTax: totalTax,
       finalTaxCode: finalTaxCode,
       nino: nino,
-      employerDetails: employerDetails,
+      employerName: employerName || 'Default Employer',
+      employerDetails: employerName,
+      employeeName: employeeName,
       rawText: text
     };
   }
@@ -338,6 +332,8 @@
     const hasStudentLoan = /student loan deductions? to continue/i.test(text) || /student loan/i.test(text);
     const taxCode = extractTaxCode(text);
     const nino = extractNINO(text);
+    const employerName = extractEmployerName(text);
+    const employeeName = extractEmployeeName(text);
 
     return {
       docType: 'p45',
@@ -347,6 +343,8 @@
       studentLoanDeduction: hasStudentLoan,
       taxCodeAtLeaving: taxCode,
       nino: nino,
+      employerName: employerName,
+      employeeName: employeeName,
       rawText: text
     };
   }
@@ -367,10 +365,15 @@
       totalBenefits = companyCar + privateMedical + relocation + fuelAllowance;
     }
 
+    const employerName = extractEmployerName(text);
+    const employeeName = extractEmployeeName(text);
+
     return {
       docType: 'p11d',
       taxYear: taxYear,
       totalBenefits: totalBenefits,
+      employerName: employerName,
+      employeeName: employeeName,
       itemizedBenefits: {
         companyCar: companyCar,
         privateMedical: privateMedical,
@@ -402,9 +405,6 @@
 
   /**
    * Performs OCR on an image File, Blob, or URL using Tesseract.js
-   * @param {File|Blob|string} imageSource
-   * @param {function} onProgress
-   * @returns {Promise<Object>} extracted text & parsed fields
    */
   async function processImage(imageSource, onProgress) {
     if (typeof Tesseract === 'undefined') {

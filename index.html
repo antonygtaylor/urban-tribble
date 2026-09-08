@@ -26,9 +26,29 @@
     </div>
   </header>
 
+  <!-- Mismatch Warning Alert Banner Container -->
+  <div id="mismatchBanner" class="alert-banner warning-banner hidden">
+    <div class="alert-content">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" class="alert-icon">
+        <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+      </svg>
+      <div class="alert-text">
+        <strong>Potential Employee Mismatch Detected:</strong>
+        <span id="mismatchMessage"></span>
+      </div>
+    </div>
+    <button id="btnDismissMismatch" class="btn-dismiss">&times;</button>
+  </div>
+
   <!-- Navigation Tabs -->
   <nav class="nav-tabs">
-    <button class="nav-tab active" data-tab="scanTab">
+    <button class="nav-tab active" data-tab="overviewTab">
+      <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+      </svg>
+      <span>Overview</span>
+    </button>
+    <button class="nav-tab" data-tab="scanTab">
       <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
         <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
       </svg>
@@ -50,11 +70,59 @@
 
   <!-- Main Container -->
   <main class="app-main">
+
+    <!-- TAB 0: OVERVIEW DASHBOARD -->
+    <section id="overviewTab" class="tab-content active">
+      <div class="card">
+        <h2>Tax Portfolio Overview</h2>
+        <p class="subtitle">Summary of your UK tax documents, employers, and annual totals</p>
+
+        <!-- High-Level Metrics Grid -->
+        <div class="summary-cards-grid">
+          <div class="summary-card">
+            <span class="card-label">Total Documents</span>
+            <span id="ovTotalDocs" class="card-value">0</span>
+            <span class="card-subtext">Stored offline</span>
+          </div>
+          <div class="summary-card">
+            <span class="card-label">Employers</span>
+            <span id="ovTotalEmployers" class="card-value">0</span>
+            <span class="card-subtext">Unique employers</span>
+          </div>
+          <div class="summary-card">
+            <span class="card-label">Total Net Earned</span>
+            <span id="ovTotalNet" class="card-value net-highlight">£0.00</span>
+            <span class="card-subtext">Across all payslips</span>
+          </div>
+          <div class="summary-card">
+            <span class="card-label">Total Tax Paid</span>
+            <span id="ovTotalTax" class="card-value">£0.00</span>
+            <span class="card-subtext">PAYE + P60 tax</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Action Card -->
+      <div class="card">
+        <div class="card-header-row">
+          <h3>Quick Scan or Upload</h3>
+          <button id="btnOverviewScan" class="btn btn-primary btn-sm">+ Add New Document</button>
+        </div>
+      </div>
+
+      <!-- Employers Section -->
+      <div class="card">
+        <h3>Documents Grouped by Employer</h3>
+        <p class="subtitle">Select an employer to view their associated tax records</p>
+        <div id="overviewEmployersList" class="employers-grid"></div>
+      </div>
+    </section>
+
     <!-- TAB 1: SCAN & ADD DOCUMENT -->
-    <section id="scanTab" class="tab-content active">
+    <section id="scanTab" class="tab-content">
       <div class="card scan-card">
         <h2>Capture or Upload Tax Document</h2>
-        <p class="subtitle">Supports UK Payslips, P60, P45, and P11D documents</p>
+        <p class="subtitle">Supports UK Payslips, P60, P45, and P11D documents with client-side OCR</p>
 
         <div class="upload-options">
           <label for="cameraInput" class="btn btn-primary btn-block">
@@ -116,7 +184,6 @@
         </div>
 
         <form id="reviewForm">
-          <!-- Dynamic Form Fields Container -->
           <div id="dynamicFields" class="form-grid"></div>
 
           <div class="form-actions">
@@ -130,17 +197,39 @@
     <!-- TAB 2: HISTORY & RECORDS LOG -->
     <section id="historyTab" class="tab-content">
       <div class="card">
-        <h2>Document History & Records</h2>
+        <div class="card-header-row">
+          <h2>Document History & Records</h2>
+          <!-- View Mode Toggle (Card vs Table) -->
+          <div class="view-toggle-group">
+            <button id="btnViewCards" class="btn-toggle active" title="Card View">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/>
+              </svg>
+              Cards
+            </button>
+            <button id="btnViewTable" class="btn-toggle" title="Table View">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M4 15h16v-2H4v2zm0 4h16v-2H4v2zm0-8h16V9H4v2zm0-6v2h16V5H4z"/>
+              </svg>
+              Table
+            </button>
+          </div>
+        </div>
         <p class="subtitle">Searchable, filterable log of all saved tax documents</p>
 
         <!-- Search & Filter Controls -->
         <div class="filter-bar">
           <div class="form-group filter-item">
-            <input type="text" id="searchInput" class="form-control" placeholder="Search by employer, name, tax code...">
+            <input type="text" id="searchInput" class="form-control" placeholder="Search employer, name, tax code...">
           </div>
           <div class="form-group filter-item">
             <select id="filterTaxYear" class="form-control">
               <option value="all">All Tax Years</option>
+            </select>
+          </div>
+          <div class="form-group filter-item">
+            <select id="filterEmployer" class="form-control">
+              <option value="all">All Employers</option>
             </select>
           </div>
           <div class="form-group filter-item">
@@ -154,7 +243,7 @@
           </div>
         </div>
 
-        <!-- Records List Container -->
+        <!-- Records List Container (Card / Table) -->
         <div id="recordsList" class="records-list"></div>
       </div>
     </section>
@@ -164,14 +253,25 @@
       <div class="card">
         <div class="card-header-row">
           <h2>Tax & Income Analytics</h2>
-          <select id="analyticsTaxYear" class="form-control inline-select">
-            <option value="all">All Tax Years</option>
-          </select>
+          <div class="header-controls-row">
+            <select id="analyticsTaxYear" class="form-control inline-select">
+              <option value="all">All Tax Years</option>
+            </select>
+            <button id="btnToggleAnalyticsTable" class="btn btn-outline btn-sm">
+              Show Data Table
+            </button>
+          </div>
         </div>
         <p class="subtitle">Financial trends, tax breakdowns, and P60 reconciliation</p>
 
         <!-- Numerical Reconciliation Summary Card -->
         <div id="reconciliationSummary" class="reconciliation-summary-container"></div>
+      </div>
+
+      <!-- Optional Analytics Structured Table View Container -->
+      <div id="analyticsTableContainer" class="card hidden">
+        <h3>Analytics Summary Table</h3>
+        <div id="analyticsTableContent" class="table-responsive"></div>
       </div>
 
       <!-- Charts Grid -->
@@ -231,7 +331,7 @@
   <!-- Toast Notification Container -->
   <div id="toast" class="toast hidden"></div>
 
-  <!-- Load Scripts Global Scope (No ES modules as per constraints) -->
+  <!-- Load Scripts Global Scope -->
   <script src="vendor/chart.min.js"></script>
   <script src="vendor/tesseract.min.js"></script>
   <script src="db.js"></script>
